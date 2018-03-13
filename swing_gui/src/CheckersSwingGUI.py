@@ -30,7 +30,7 @@ class CheckersSwingGUI():
                                     stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE,
                                     universal_newlines=True,
-                                    cwd='../swing_gui/'
+                                    cwd='../swing_gui/bin'
                                     )
 
         # Set the parent process ID attribute in the Swing process.

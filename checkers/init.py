@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
-sys.path.append('../swing_gui/')
+sys.path.append('../swing_gui/src/')
 
 from pprint import pprint
 import time
