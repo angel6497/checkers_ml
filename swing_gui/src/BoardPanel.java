@@ -23,6 +23,7 @@ public class BoardPanel extends JPanel {
     private BoardMode mode = BoardMode.IDLE;
     private int[] selectedPiece = null;
     private int[] selectedMove = null;
+    private int[] draggedPiece = null;
 
 
     // Constructor
@@ -42,8 +43,10 @@ public class BoardPanel extends JPanel {
                 }
             }
         }
-         
-        addMouseListener(new BoardMouseListener());
+        
+        BoardMouseListener mouseListener = new BoardMouseListener();
+        addMouseListener(mouseListener);
+        addMouseMotionListener(mouseListener);
 
     }
 
@@ -81,6 +84,10 @@ public class BoardPanel extends JPanel {
                               break;
                 }
             }
+        }
+
+        if (draggedPiece != null) {
+            paintUnalignedPiece(draggedPiece[0], draggedPiece[1], draggedPiece[2], g2d);
         }
 
     }
@@ -199,6 +206,24 @@ public class BoardPanel extends JPanel {
 
     }
 
+    // Paint a piece in the given pixel coordinates.
+    private void paintUnalignedPiece(int x, int y, int kind, Graphics2D g2d) {
+
+        // Set colors.
+        Color mainColor = kind > 0 ? new Color(67, 67, 67) : Color.WHITE;
+        Color secondaryColor = kind > 0 ? new Color(173, 30, 0) : new Color(6, 82, 168);
+
+        // Paint the piece itself
+        g2d.setColor(mainColor);
+        g2d.fill(new Ellipse2D.Float(x - 35, y - 35, LENGTH - OFFSET, LENGTH - OFFSET));
+
+        if (kind % 3 == 0) {
+            g2d.setColor(secondaryColor);
+            g2d.fill(new Ellipse2D.Float(x - 10, y - 10, 20, 20));
+        }
+
+    }
+
     // Converts x and y pixel coordinates into tile coordinates.
     private int[] pixelToTile(int xp, int yp) {
 
@@ -227,55 +252,98 @@ public class BoardPanel extends JPanel {
 
     //******* INNER LISTENER CLASS *******
 
-    class BoardMouseListener implements MouseListener {
+    class BoardMouseListener implements MouseListener, MouseMotionListener {
 
-        public void mouseClicked(MouseEvent ev) {
-            int x = ev.getX();
-            int y = ev.getY(); 
-
-            int[] tc = pixelToTile(x, y);
-            int selectedTile = boardState[tc[1]][tc[0]];
-
-            switch (mode) {
-                
-                case GET_BLACK_MOVE: if (selectedPiece != null) {
-                                        selectedMove = new int[4];
-                                        selectedMove[0] = selectedPiece[0];
-                                        selectedMove[1] = selectedPiece[1];
-                                        selectedMove[2] = tc[0];
-                                        selectedMove[3] = tc[1];
-                                     } else if (selectedTile > 0) {
-                                        selectedPiece = new int[2];
-                                        selectedPiece[0] = tc[0];
-                                        selectedPiece[1] = tc[1];
-                                        boardState[tc[1]][tc[0]] *= 10;
-                                        repaint();
-                                     }
-                                     break;
-
-                case GET_WHITE_MOVE: if (selectedPiece != null) {
-                                        selectedMove = new int[4];
-                                        selectedMove[0] = selectedPiece[0];
-                                        selectedMove[1] = selectedPiece[1];
-                                        selectedMove[2] = tc[0];
-                                        selectedMove[3] = tc[1];
-                                     } else if (selectedTile < 0) {
-                                        selectedPiece = new int[2];
-                                        selectedPiece[0] = tc[0];
-                                        selectedPiece[1] = tc[1];
-                                        boardState[tc[1]][tc[0]] *= 10;
-                                        repaint();
-                                     }
-                                     break;
-
-            }
-        }
+        boolean dragging = false;
+        int[] move;
 
         // Mouse Listener interface required the implementation of these methods.
-        public void mousePressed(MouseEvent ev) {}
-        public void mouseReleased(MouseEvent ev) {}
+        public void mousePressed(MouseEvent ev) {
+
+            int x = ev.getX();
+            int y = ev.getY(); 
+            int[] tc = pixelToTile(x, y);
+
+            switch (mode) {
+
+                case GET_BLACK_MOVE:
+                    if (boardState[tc[1]][tc[0]] > 0) {
+                        draggedPiece = new int[3];
+                        draggedPiece[0] = x;
+                        draggedPiece[1] = y;
+                        draggedPiece[2] = boardState[tc[1]][tc[0]];
+                        boardState[tc[1]][tc[0]] = 0;
+
+                        move = new int[4];
+                        move[0] = tc[0];
+                        move[1] = tc[1];
+                        dragging = true;
+
+                        repaint();
+                    }
+                    break;
+
+                case GET_WHITE_MOVE:
+                    if (boardState[tc[1]][tc[0]] < 0) {
+                        draggedPiece = new int[3];
+                        draggedPiece[0] = x;
+                        draggedPiece[1] = y;
+                        draggedPiece[2] = boardState[tc[1]][tc[0]];
+                        boardState[tc[1]][tc[0]] = 0;
+
+                        move = new int[4];
+                        move[0] = tc[0];
+                        move[1] = tc[1];
+                        dragging = true;
+
+                        repaint();
+                    }
+                    break;
+
+            }
+
+
+        }
+
+        public void mouseReleased(MouseEvent ev) {
+
+            int x = ev.getX();
+            int y = ev.getY(); 
+            int[] tc = pixelToTile(x, y);
+
+            if (move != null) {
+                move[2] = tc[0];
+                move[3] = tc[1];
+                selectedMove = move;
+                move = null;
+            }
+
+            draggedPiece = null;
+            dragging = false;
+
+        }
+
+        public void mouseDragged(MouseEvent ev) {
+
+            if (dragging) {
+                int x = ev.getX();
+                int y = ev.getY(); 
+
+                draggedPiece[0] = x;
+                draggedPiece[1] = y;
+
+                repaint();
+            }
+
+        }
+            
+        // Mouse Listener Unimplemented Methods
+        public void mouseClicked(MouseEvent ev) {}
         public void mouseEntered(MouseEvent ev) {}
         public void mouseExited(MouseEvent ev) {}
+
+        // Mouse Motion Listener Unimplemented Methods
+        public void mouseMoved(MouseEvent ev) {}
 
     }
 

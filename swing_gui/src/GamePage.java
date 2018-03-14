@@ -68,9 +68,9 @@ public class GamePage extends JFrame implements WindowListener {
 
         // Initialize status message components.
         statusPanel = new JPanel();
-        statusPanel.setBackground(Color.DARK_GRAY);
+        statusPanel.setBackground(new Color(64, 64, 64));
 
-        statusMessage = new JLabel();
+        statusMessage = new JLabel("New Game");
         statusMessage.setFont( new Font(Font.SANS_SERIF, Font.PLAIN, 18) );
         statusMessage.setForeground(Color.WHITE);
 
@@ -110,7 +110,9 @@ public class GamePage extends JFrame implements WindowListener {
 
                         buffer.remove();
                         
-                        statusMessage.setText(statusMsg);
+                        if (! statusMessage.getText().equals(statusMsg) ) { 
+                            changeStatus(statusMsg);
+                        }
                         break;
 
                     case "display":
@@ -201,6 +203,27 @@ public class GamePage extends JFrame implements WindowListener {
         } catch (IOException ex) {
             ex.printStackTrace();
         }
+    }
+    
+    // Animates the change of status.
+    private void changeStatus(String msg) {
+    
+        try{
+           for (int i = 255; i > 64; i = i - 2) {
+               statusMessage.setForeground( new Color(i, i, i) );
+               Thread.sleep(5);
+           }
+
+           statusMessage.setText(msg);
+
+           for (int i = 64; i < 255; i = i + 2) {
+               statusMessage.setForeground( new Color(i, i, i) );
+               Thread.sleep(5);
+           }
+        } catch (InterruptedException ex) {
+            ex.printStackTrace();
+        }
+
     }
 
 
