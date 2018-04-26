@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
+import os
 import sys
 import time
 import logging
 import datetime
 import argparse
 
-from controller import CheckersController
+from checkersml.controller import CheckersController
 
 
 def main():
@@ -17,7 +18,7 @@ def main():
     args   = parse_arguments()
     logger = setup_logger(args.debug)
 
-    controller = CheckersController(args.notrain)
+    controller = CheckersController(args.notrain, args.nodata)
 
     if args.play != None:
         controller.play(args.play)
@@ -35,12 +36,13 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument( '--train', '-train', type=int,
+    parser.add_argument( '-train', type=int,
                          help='Train the ML Player model by having it play against itself.' )
-    parser.add_argument( '--play', '-play', type=int, 
+    parser.add_argument( '-play', type=int, 
                          help='Play a real game using a GUI. Argument determines number of real players.' )
-    parser.add_argument( '--notrain', '-notrain', action='store_true', help='Prevents training during real games.' )
-    parser.add_argument( '--debug', '-debug', action='store_true', help='Enable debug messages.' )
+    parser.add_argument( '-notrain', action='store_true', help='Prevents training during real games.' )
+    parser.add_argument( '-nodata', action='store_true', help='Stops training data from being saved to files.' )
+    parser.add_argument( '-debug', action='store_true', help='Enable debug messages.' )
 
     args = parser.parse_args()
 
@@ -57,12 +59,18 @@ def setup_logger(debug):
     Create and setup logger instance.
     '''
 
+    if not os.path.isdir('logs'):
+        os.mkdir('logs')
+        
+    dt      = datetime.datetime.today().strftime('%Y-%m-%d_%H:%M:%S.log')
+    logfile = os.path.join('logs', dt)
+
     logger = logging.getLogger()
 
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter( ColoredFormatter() )
 
-    file_handler   = logging.FileHandler('log.txt', mode='w')
+    file_handler   = logging.FileHandler(logfile, mode='w')
     file_formatter = logging.Formatter('[{asctime} {levelname}] {message}', datefmt='%H:%M:%S', style='{')
     file_handler.setFormatter(file_formatter)
 

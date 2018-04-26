@@ -1,6 +1,9 @@
+import os
+import csv
 import random
+import datetime
+import collections
 import numpy as np
-import os.path
 from abc import ABC, abstractmethod
 
 from . import util
@@ -27,7 +30,22 @@ class Player(ABC):
 
 
 
-class MLPlayer(Player):
+class RealPlayer(Player):
+    '''
+    Real player class.
+
+    This class allows a real player to interact with the GUI and make a move.
+    '''
+
+    def make_move(self, move=None):
+        '''
+        Take move from the GUI and update it into the board.
+        '''
+        pass
+
+
+
+class LinearRegressionPlayer(Player):
     '''
     Machine learning player class.
     
@@ -39,26 +57,34 @@ class MLPlayer(Player):
         
         super().__init__(color, board)
 
+        self.learn_rate = 0.01
+        self.regularization_const = 0.005
+
         self.params_num  = 7
         self.params_file = params_file
-        params           = util.get_params(params_file, self.params_num)
-        self.params      = np.array(params, dtype=float)
+        self.params      = util.get_params(params_file, self.params_num)
+        self.records     = collections.deque()
 
         if self.color == 'black':
             self.features = [ features.BlackPiecesFeature(),
-                               features.WhitePiecesFeature(),
-                               features.BlackKingsFeature(),
-                               features.WhiteKingsFeature(),
-                               features.BlackThreatenedFeature(),
-                               features.WhiteThreatenedFeature() ]
+                              features.WhitePiecesFeature(),
+                              features.BlackKingsFeature(),
+                              features.WhiteKingsFeature(),
+                              features.BlackThreatenedFeature(),
+                              features.WhiteThreatenedFeature() ]
         else:
             self.features = [ features.WhitePiecesFeature(),
-                               features.BlackPiecesFeature(),
-                               features.WhiteKingsFeature(),
-                               features.BlackKingsFeature(),
-                               features.WhiteThreatenedFeature(),
-                               features.BlackThreatenedFeature() ]
-      
+                              features.BlackPiecesFeature(),
+                              features.WhiteKingsFeature(),
+                              features.BlackKingsFeature(),
+                              features.WhiteThreatenedFeature(),
+                              features.BlackThreatenedFeature() ]
+
+        dt = datetime.datetime.today().strftime('%Y-%m-%d_%H:%M:%S')
+        self.logdir = os.path.join('training_data', dt)
+
+        if not os.path.isdir(self.logdir):
+            os.makedirs(self.logdir)
 
 
     def compute_features(self):
@@ -111,23 +137,57 @@ class MLPlayer(Player):
         Retunrs a formated string with the current values of all the features.
         '''
 
-        s = 'Constant parameter: {:.2}\n'.format(self.params[0])
+        line_format = '{:.<33}: {: >7.2f}'
+
+        lines = [ line_format.format('Constant', self.params[0]) ]
         for i in range(1, self.params_num):
-            s += '{}: {:.3}\n'.format(self.features[i-1].get_name(), self.params[i])
+            lines.append( line_format.format(self.features[i-1].get_name(), self.params[i]) )
 
-        return s.strip()
+        return lines
 
 
-
-class RealPlayer(Player):
-    '''
-    Real player class.
-
-    This class allows a real player to interact with the GUI and make a move.
-    '''
-
-    def make_move(self, move=None):
+    def add_record(self, record):
         '''
-        Take move from the GUI and update it into the board.
+        Adds record for a board position and its calculated score.
         '''
-        pass
+        
+        if len(record) != self.params_num:
+            raise ValueError( ('Records for the current player must contain {} feature values '
+                              +'plus the score.').format(self.params_num) )
+
+        self.records.append(record)
+
+
+    def write_records(self, records_file='match_data', cycle=''):
+        '''
+        Write current records to a file.
+        '''
+        
+        records_file = '{}{}.rcd'.format(records_file, cycle)
+        records_file = os.path.join(self.logdir, records_file)
+
+        with open(records_file, 'w') as file:
+            writer = csv.writer(file)
+            writer.writerows(self.records)
+
+
+    def fit_data(self):
+        '''
+        Update the current parameters using new training data.
+        '''
+
+        for entry in self.records:
+
+            train_score = entry.pop()
+            pred_score  = util.evaluate(self.params, entry)
+
+            entry = np.insert(entry, 0, 1)
+            
+            self.params = ( self.params + ( self.learn_rate * ( ((train_score - pred_score) * entry) 
+                                                              - (self.regularization_const * self.params) ) ) )
+
+        self.save_params()
+        self.records.clear()
+
+
+

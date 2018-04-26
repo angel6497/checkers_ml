@@ -1,3 +1,6 @@
-/swing_gui/bin/
 **/*.pyc
 **/__pycache__
+/swing_gui/bin/
+logs
+parameters
+training_data

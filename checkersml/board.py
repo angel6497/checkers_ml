@@ -17,7 +17,11 @@ WHITE_KING = -3
 
 class Board:
     '''
-    TODO
+    Board class.
+
+    This class represents the checkers board and provides all the functionality that
+    allows to play the game, like computing the legal moves from a certain position or
+    updating the board taking all the steps that it implies.
     '''
     
     def __init__(self, state=None):

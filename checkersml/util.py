@@ -30,5 +30,5 @@ def get_params(params_file, params_num):
             params = np.zeros(params_num)
             params_file.write(','.join( list('0' * params_num) ))
 
-    return params
+    return np.array(params, dtype=float)
 
