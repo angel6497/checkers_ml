@@ -1,11 +1,12 @@
 import os
 import logging
 
-from checkersml import board, player, features, util
+from checkersml import board, player, features
 from swinggui import CheckersSwingGUI
 
 import sys
 import pdb
+from pprint import pprint
 
 
 class CheckersController:
@@ -36,11 +37,11 @@ class CheckersController:
         b = board.Board()
 
         if real_players == 0:
-            player1 = player.LinearRegressionPlayer('black', b, params_file='parameters/black_parameters.csv')
-            player2 = player.LinearRegressionPlayer('white', b, params_file='parameters/white_parameters.csv')
+            player1 = player.LinearRegressionPlayer('black', b, save_file='pickled_models/black_trained_model.pickle')
+            player2 = player.LinearRegressionPlayer('white', b, save_file='pickled_models/white_trained_model.pickle')
         elif real_players == 1:
             player1 = player.RealPlayer('black', b)
-            player2 = player.LinearRegressionPlayer('white', b, params_file='parameters/white_parameters.csv')
+            player2 = player.LinearRegressionPlayer('white', b, save_file='pickled_models/white_trained_model.pickle')
         else:
             self.no_train = True
             player1 = player.RealPlayer('black', b)
@@ -49,7 +50,7 @@ class CheckersController:
         b.set_players(player1, player2)
 
         if real_players < 2:
-            t = trainer.Trainer(b, player2, no_data=self.no_data)
+            trainee = player2
 
         gui = CheckersSwingGUI()
         gui.display( str(b) )
@@ -84,9 +85,8 @@ class CheckersController:
                 if b.player_in_turn.color != trainee.color and not prev_features:
                     prev_features = trainee.compute_features()
                 elif b.player_in_turn.color == trainee.color and prev_features:
-                    score = util.evaluate(trainee.params, trainee.compute_features())
-                    prev_features.append(score)
-                    trainee.add_record(prev_features)
+                    score = trainee.evaluate(trainee.compute_features())
+                    trainee.add_record(prev_features, score)
                     prev_features = None
 
             gui.display( str(b) )
@@ -97,14 +97,13 @@ class CheckersController:
                 # propagation.
                 if not self.no_train:
                     if b.player_in_turn.color == trainee.color:
-                        prev_features = trainee.records.pop()[:-1]
+                        prev_features = trainee.pop_record()[0]
 
-                    score = util.evaluate(trainee.params, trainee.compute_features())
-                    prev_features.append(score)
-                    trainee.add_record(prev_features)
+                    score = trainee.evaluate(trainee.compute_features())
+                    trainee.add_record(prev_features, score)
 
                     if not self.no_data:
-                        trainee.write_records()
+                        trainee.save_records()
 
                     # Train on the newly generated data.
                     if not self.no_train:
@@ -133,14 +132,13 @@ class CheckersController:
     
         b = board.Board()
 
-        black_player = player.LinearRegressionPlayer('black', b, params_file='parameters/black_parameters.csv')
-        white_player = player.LinearRegressionPlayer('white', b, params_file='parameters/zeros.csv')
+        black_player = player.LinearRegressionPlayer('black', b, save_file='pickled_models/black_trained_model.pickle')
+        white_player = player.LinearRegressionPlayer('white', b, save_file='pickled_models/white_trained_model.pickle')
 
         trainee = black_player
         
         curr_cycle        = 1
         trainee_wins      = 0
-        consecutive_loss  = 0
         total_turns       = 0
 
         while(True):
@@ -178,9 +176,8 @@ class CheckersController:
                     if b.player_in_turn.color != trainee.color and not prev_features:
                         prev_features = trainee.compute_features()
                     elif b.player_in_turn.color == trainee.color and prev_features:
-                        score = util.evaluate(trainee.params, trainee.compute_features())
-                        prev_features.append(score)
-                        trainee.add_record(prev_features)
+                        score = trainee.evaluate(trainee.compute_features())
+                        trainee.add_record(prev_features, score)
                         prev_features = None
 
                     if b.game_over:
@@ -188,20 +185,16 @@ class CheckersController:
                         # This step is critical during the first cycles because it generates experience
                         # propagation.
                         if b.player_in_turn.color == trainee.color:
-                            prev_features = trainee.records.pop()[:-1]
+                            prev_features = trainee.pop_record()[0]
 
-                        score = util.evaluate(trainee.params, trainee.compute_features())
-                        prev_features.append(score)
-                        trainee.add_record(prev_features)
+                        score = trainee.evaluate(trainee.compute_features())
+                        trainee.add_record(prev_features, score)
 
                         if not self.no_data:
-                            trainee.write_records(cycle=curr_cycle)
+                            trainee.save_records(cycle=curr_cycle)
 
                         if b.player_in_turn.color == trainee.color:
                             trainee_wins += 1
-                            consecutive_loss = 0
-                        else:
-                            consecutive_loss += 1
 
                         total_turns += turn_count
 
@@ -214,14 +207,14 @@ class CheckersController:
                 self.logger.info( 'Total turns: {}'.format(turn_count) )
                 self.logger.info( 'Average turns per match: {:.2f}\n'.format(total_turns/curr_cycle) )
                 self.logger.info( 'Trainee parameters:' )
-                for line in trainee.get_parameters_string():
-                    self.logger.info( '   {}'.format(line) )
+                for line in trainee.get_parameters_string().split('\n'):
+                    self.logger.info( '\t{}'.format(line) )
                 self.logger.info( 'Trainee win rate: {:.2%}'.format(trainee_wins/curr_cycle) )
                 self.logger.info( '---------------------------------------------\n' )
                 
                 # Stop training is max number of cycles if reached.
                 curr_cycle += 1
-                if max_cycles and curr_cycle >= max_cycles:
+                if max_cycles and curr_cycle > max_cycles:
                     self.logger.info('Final trainee win rate: {:.2%}'.format(trainee_wins/max_cycles))
                     sys.exit(0)
 
@@ -233,7 +226,7 @@ class CheckersController:
                 self.logger.info( 'Total turns: {}'.format(turn_count) )
                 self.logger.info( 'Average turns per match: {:.2f}\n'.format(total_turns/curr_cycle) )
                 self.logger.info( 'Trainee parameters:' )
-                for line in trainee.get_parameters_string():
+                for line in trainee.get_parameters_string().split('\n'):
                     self.logger.info( '   {}'.format(line) )
                 self.logger.info( 'Trainee win rate: {:.2%}'.format(trainee_wins/curr_cycle) )
                 self.logger.info( '---------------------------------------------\n' )

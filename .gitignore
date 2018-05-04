@@ -2,5 +2,5 @@
 **/__pycache__
 /swing_gui/bin/
 logs
-parameters
+pickled_models
 training_data

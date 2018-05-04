@@ -1,15 +1,13 @@
 import os
-import csv
+import pickle
 import random
 import datetime
-import collections
 import numpy as np
 from abc import ABC, abstractmethod
 
-from . import util
 from . import features
+from . import model
 
-import pdb
 
 class Player(ABC):
     '''
@@ -25,7 +23,7 @@ class Player(ABC):
         self.board = board
 
     @abstractmethod
-    def make_move(self, move=None):
+    def make_move(self):
         pass
 
 
@@ -37,7 +35,7 @@ class RealPlayer(Player):
     This class allows a real player to interact with the GUI and make a move.
     '''
 
-    def make_move(self, move=None):
+    def make_move(self):
         '''
         Take move from the GUI and update it into the board.
         '''
@@ -45,26 +43,171 @@ class RealPlayer(Player):
 
 
 
-class LinearRegressionPlayer(Player):
+class MLPlayer(Player):
     '''
-    Machine learning player class.
-    
-    This player will use a trained machine learning function that assigns scores to board
-    possitions in order to choose the optimal move among the list of possible legal moves.
+    MLPlayer Abstract Class
+
+    This class implements a player framework that can interact with the checkers engine
+    and use an arbitrary machine learning model to play and train.
     '''
 
-    def __init__(self, color, board, params_file='parameters.csv'):
+    def __init__(self, color, board, save_file='parameters.pickle'):
         
         super().__init__(color, board)
 
-        self.learn_rate = 0.01
+        self.learning_rate = 0.01
         self.regularization_const = 0.005
 
-        self.params_num  = 7
-        self.params_file = params_file
-        self.params      = util.get_params(params_file, self.params_num)
-        self.records     = collections.deque()
+        self.save_file = save_file
+        self.records_X = None
+        self.records_y = None
 
+        save_file_dir = os.path.dirname(save_file)
+        if save_file_dir and not os.path.exists(save_file_dir):
+            os.makedirs(save_file_dir)
+
+        self.set_model()
+
+        dt = datetime.datetime.today().strftime('%Y-%m-%d_%H:%M:%S')
+        self.logdir = os.path.join('training_data', dt)
+
+        if not os.path.isdir(self.logdir):
+            os.makedirs(self.logdir)
+
+
+    @abstractmethod
+    def compute_features(self):
+        pass
+
+    
+    @abstractmethod
+    def set_model(self):
+        pass 
+
+
+    def save_model(self):
+        '''
+        Save the current model state into a pickle.
+        '''
+
+        pickle.dump(self.model, open(self.save_file, 'wb'))
+
+
+    def get_parameters_string(self):
+        '''
+        Return a string representation of the model current weights.
+        '''
+
+        return str(self.model.coefs_)
+
+
+    def evaluate(self, x):
+        '''
+        Use the current movel to evaluate a certain board state.
+        '''
+
+        return self.model.predict(x)
+
+
+    def fit_data(self):
+        '''
+        Adjust the model using the latest gathered data.
+        '''
+
+        self.model.partial_fit(self.records_X, self.records_y)
+        self.save_model()
+        self.records_X = None
+        self.records_y = None
+
+
+    def make_move(self):
+        '''
+        Evaluate all possible moves using the trained evaluating function and choose
+        the optimal one.
+        '''
+
+        move_scores = {}
+
+        legal_moves = self.board.get_all_legal_moves(self.color)
+
+        if not legal_moves:
+            return None
+
+        for move in legal_moves:
+            move_features = self.board.get_move_features_values(move)
+            score = self.model.predict( np.array(move_features) )
+            
+            if not move_scores.get(score):
+                move_scores[score] = []
+
+            move_scores[score].append(move)
+        
+        best_moves = move_scores[max(move_scores.keys())]
+        
+        return random.choice(best_moves)
+
+
+    def add_record(self, x, y):
+        '''
+        Adds record for a board position and its calculated score.
+        '''
+        
+        if isinstance(self.records_X, np.ndarray) and len(x) != len(self.records_X[0]):
+            raise ValueError('All records must be of the same length.')
+
+        # Initialize the records variables if adding the first entries.
+        if not isinstance(self.records_X, np.ndarray):
+            self.records_X = np.array([x])
+            self.records_y = np.array([y])
+        else:
+            self.records_X = np.append(self.records_X, [x], axis=0)
+            self.records_y = np.append(self.records_y, [y], axis=0)
+
+
+    def pop_record(self):
+        '''
+        Remove the last record added.
+        '''
+
+        poped_x = self.records_X[-1]
+        poped_y = self.records_y[-1]
+
+        self.records_X = np.delete(self.records_X, -1, axis=0)
+        self.records_y = np.delete(self.records_y, -1, axis=0)
+
+        return poped_x, poped_y
+
+
+    def save_records(self, records_file='match_data', cycle=''):
+        '''
+        Write current records to a csv file.
+        '''
+        
+        records_file = '{}{}.rcd'.format(records_file, cycle)
+        records_file = os.path.join(self.logdir, records_file)
+
+        full_records = np.c_[self.records_X, self.records_y]
+
+        np.savetxt(records_file, full_records, delimiter=',')
+
+
+
+class LinearRegressionPlayer(MLPlayer):
+    '''
+    LinearRegressionPlayer class.
+    
+    This player class uses a linear regression model to assign values to board positions
+    in order to chose the optimal move among the list of possible legal moves.
+
+    To represent the board, six features are extracted from a board state before they are
+    passed to the model.
+    '''
+
+    def __init__(self, color, board, save_file='parameters.pickle'):
+
+        super().__init__(color, board, save_file)
+
+        # Initialize feature objects to compute simplified version of the board state.
         if self.color == 'black':
             self.features = [ features.BlackPiecesFeature(),
                               features.WhitePiecesFeature(),
@@ -80,12 +223,6 @@ class LinearRegressionPlayer(Player):
                               features.WhiteThreatenedFeature(),
                               features.BlackThreatenedFeature() ]
 
-        dt = datetime.datetime.today().strftime('%Y-%m-%d_%H:%M:%S')
-        self.logdir = os.path.join('training_data', dt)
-
-        if not os.path.isdir(self.logdir):
-            os.makedirs(self.logdir)
-
 
     def compute_features(self):
         '''
@@ -95,99 +232,42 @@ class LinearRegressionPlayer(Player):
         return [ f.compute_value(self.board) for f in self.features ]
 
 
-    def make_move(self, move=None):
+    def set_model(self):
         '''
-        Evaluate all possible moves using the trained evaluating function and choose
-        the optimal one.
-        '''
-
-        move_scores = {}
-
-        legal_moves = self.board.get_all_legal_moves(self.color)
-
-        if not legal_moves:
-            return None
-
-        for move in legal_moves:
-            move_features = self.board.get_move_features_values(move)
-            score = util.evaluate(self.params, np.array(move_features))
-            
-            if not move_scores.get(score):
-                move_scores[score] = []
-
-            move_scores[score].append(move)
-        
-        best_moves = move_scores[max(move_scores.keys())]
-        
-        return random.choice(best_moves)
-
-
-    def save_params(self):
-        '''
-        Saves current paramters into the parameters file, replacing the old ones.
+        Initialize a new linear regression model or load existing one from 'save_file'.
         '''
 
-        with open(self.params_file, 'w') as params_file:
-            params_string = ','.join( [str(x) for x in self.params] )
-            params_file.write( params_string )
+        try:
+            self.model = pickle.load( open(self.save_file, 'rb') )
+        except (FileNotFoundError, EOFError, pickle.UnpicklingError):
+            self.model = model.LinearRegressionModel(6, self.learning_rate, self.regularization_const) 
 
 
+    # Override
     def get_parameters_string(self):
         '''
         Retunrs a formated string with the current values of all the features.
         '''
 
-        line_format = '{:.<33}: {: >7.2f}'
+        line_format = '{:.<33}: {: >7.2f}\n'
 
-        lines = [ line_format.format('Constant', self.params[0]) ]
-        for i in range(1, self.params_num):
-            lines.append( line_format.format(self.features[i-1].get_name(), self.params[i]) )
+        lines = line_format.format('Constant', self.model.coefs_[0])
+        for i in range(1, len(self.features) + 1):
+            lines += ( line_format.format(self.features[i-1].get_name(), self.model.coefs_[i]) )
 
         return lines
 
 
-    def add_record(self, record):
+    # Override
+    def evaluate(self, x):
         '''
-        Adds record for a board position and its calculated score.
-        '''
-        
-        if len(record) != self.params_num:
-            raise ValueError( ('Records for the current player must contain {} feature values '
-                              +'plus the score.').format(self.params_num) )
-
-        self.records.append(record)
-
-
-    def write_records(self, records_file='match_data', cycle=''):
-        '''
-        Write current records to a file.
-        '''
-        
-        records_file = '{}{}.rcd'.format(records_file, cycle)
-        records_file = os.path.join(self.logdir, records_file)
-
-        with open(records_file, 'w') as file:
-            writer = csv.writer(file)
-            writer.writerows(self.records)
-
-
-    def fit_data(self):
-        '''
-        Update the current parameters using new training data.
+        Use the current movel to evaluate a certain board state.
         '''
 
-        for entry in self.records:
+        # Return 100 if the game is won or -100 if the game is lost.
+        if x[0] == 0:
+            return -100
+        elif x[1] == 0:
+            return 100
 
-            train_score = entry.pop()
-            pred_score  = util.evaluate(self.params, entry)
-
-            entry = np.insert(entry, 0, 1)
-            
-            self.params = ( self.params + ( self.learn_rate * ( ((train_score - pred_score) * entry) 
-                                                              - (self.regularization_const * self.params) ) ) )
-
-        self.save_params()
-        self.records.clear()
-
-
-
+        return super().evaluate(x)
