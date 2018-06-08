@@ -5,7 +5,7 @@ from . import board
 
 class Feature(ABC):
     '''
-    Abstract feature class.
+    Abstract feature class
 
     This class describes the basic functionality required by all features.
     '''
@@ -17,6 +17,7 @@ class Feature(ABC):
     @abstractmethod
     def compute_value(self, board):
         pass
+
 
 
 class WhitePiecesFeature(Feature):
@@ -38,6 +39,7 @@ class WhitePiecesFeature(Feature):
         return value
 
 
+
 class BlackPiecesFeature(Feature):
     '''
     This feature compute the number of regular black pieces on the board.
@@ -55,6 +57,7 @@ class BlackPiecesFeature(Feature):
                     value += 1
 
         return value
+
 
 
 class WhiteKingsFeature(Feature):
@@ -76,6 +79,7 @@ class WhiteKingsFeature(Feature):
         return value
 
 
+
 class BlackKingsFeature(Feature):
     '''
     This feature compute the number of black kings on the board.
@@ -93,6 +97,7 @@ class BlackKingsFeature(Feature):
                     value += 1
 
         return value
+
 
 
 class WhiteThreatenedFeature(Feature):
@@ -119,6 +124,7 @@ class WhiteThreatenedFeature(Feature):
         return len(threatened_pieces)
 
 
+
 class BlackThreatenedFeature(Feature):
     '''
     This feature compute the number of regular white threatened pieces on the board.
@@ -140,3 +146,37 @@ class BlackThreatenedFeature(Feature):
                 threatened_pieces.add(threatened_piece)
 
         return len(threatened_pieces)
+
+
+
+class PositionValueFeature(Feature):
+    '''
+    This feature gets the current piece value of a certain location at the board.
+    The location to be used in each instance is provided in the contructor.
+    '''
+
+    def __init__(self, col, row, color):
+        self.col = col
+        self.row = row
+        self.color = color
+
+        if color == 'black':
+            self.value_map = {  3:  1, 
+                                1:  0.5,
+                                0:  0,
+                               -1: -0.5,
+                               -3: -1  }
+        else:
+            self.value_map = {  3: -1, 
+                                1: -0.5,
+                                0:  0,
+                               -1:  0.5,
+                               -3:  1  }
+
+
+    def get_name(self):
+        return 'Position Value Feature [{}, {}]'.format(self.col+1, self.row+1)
+
+
+    def compute_value(self, b):
+        return self.value_map[ b.state[self.row][self.col] ]

@@ -1,6 +1,5 @@
 **/*.pyc
 **/__pycache__
-/swing_gui/bin/
 logs
 pickled_models
 training_data

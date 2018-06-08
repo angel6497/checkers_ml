@@ -9,7 +9,7 @@ of providing a computer opponent against which a user can play.
 
 ## Status
 
-Application is currently working. 
+The application is currently working. 
 
 At this point the application provides regular play functionality either against a computer or another real player, and trainning functionality which trains a simple linear regression model by having it play against itself. The model represents the entire board states through 6 features, and the learning algorithm used is stochastic gradient descent. Right now the model can achieve 70% win rate against a random untrained player.
 

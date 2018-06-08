@@ -17,7 +17,7 @@ WHITE_KING = -3
 
 class Board:
     '''
-    Board class.
+    Board class
 
     This class represents the checkers board and provides all the functionality that
     allows to play the game, like computing the legal moves from a certain position or
@@ -35,6 +35,8 @@ class Board:
         self.player_in_turn = None
         self.legal_moves    = {}
         self.required_src   = None
+        self.turn_count     = 0
+        self.no_jump_count  = 0
         self.game_over      = False
 
 
@@ -127,7 +129,7 @@ class Board:
 
         # Check if the game is over.
         if self._is_game_over():
-            self.game_over = True
+            self.game_over = 1
             return
 
         # Reset moves cache.
@@ -141,23 +143,36 @@ class Board:
                 if m.capture:
                     continue_turn = True
 
-        # Update the current player if turn if over.
+        # Update the current player if turn is over.
         if not continue_turn:
             self.required_src = None
             self.player_in_turn = next(self.players)
+            self.turn_count += 1
+            if self.turn_count > 50 and not move.capture:
+                self.no_jump_count += 1
+            else:
+                self.no_jump_count = 0
         else:
             self.required_src = move.dst
 
+        # Check that the next player can make any moves.
+        if not [ self.get_all_legal_moves(self.player_in_turn.color, cache=False) ]:
+            self.game_over = 2 # Game over due to player blocked.
+            self.player_in_turn = next(self.players)
 
-    def get_legal_moves(self, x, y):
+        if self.no_jump_count > 50:
+            self.game_over = 3 # Game over due to tie.
+
+
+    def get_legal_moves(self, x, y, cache=True):
         '''
-        Gets the list of possible moves from a given tile in the board.
+        Computes the list of possible moves from a given tile in the board.
         Additionally saves a copy of the legal moves for that tile until
         the board is updated.
         '''
        
         # Return cached version if available.
-        if (x, y) in self.legal_moves:
+        if cache and (x, y) in self.legal_moves:
             return self.legal_moves[(x, y)]
 
         legal_moves = []
@@ -253,12 +268,13 @@ class Board:
                 possible_capture = True
 
         # Save the result into legal moves cache.
-        self.legal_moves[(x, y)] = legal_moves
+        if cache:
+            self.legal_moves[(x, y)] = legal_moves
 
         return legal_moves
 
 
-    def get_all_legal_moves(self, color):
+    def get_all_legal_moves(self, color, cache=True):
         '''
         Gets a list of all the legal moves that player of color 'color' could make in
         the current board state.
@@ -268,21 +284,73 @@ class Board:
         KING_COLOR = BLACK_KING if color == 'black' else WHITE_KING
 
         legal_moves = []
-        jumps_available = False
 
         for row in range(8):
             for col in range(8):
                 if self.state[row][col] == PAWN_COLOR or self.state[row][col] == KING_COLOR:
-                    moves = self.get_legal_moves(col, row)
+                    moves = self.get_legal_moves(col, row, cache=cache)
                     legal_moves += moves
 
         # If there is any possible jump then only other jumps are legal.
-        for move in legal_moves:
-            if move.capture:
-                legal_moves = [ m for m in legal_moves if m.capture ]
-                break
+        capture_moves = [ m for m in legal_moves if m.capture ]
+        if capture_moves:
+            legal_moves = capture_moves
 
         return legal_moves
+
+
+    def temporary_update(self, move):
+        '''
+        Updates the board without showing any changes to the user and produces an undo key
+        to revert the update.
+
+        This function assumes the move provided is legal.
+        '''
+
+        undo_key = { 'move': move }
+
+        # Update location of the moving piece and promote piece if neccesary.
+        self.state[move.dst[1]][move.dst[0]] = self.state[move.src[1]][move.src[0]]
+        self.state[move.src[1]][move.src[0]] = EMPTY
+        if move.promote:
+            self.state[move.dst[1]][move.dst[0]] *= 3
+
+        # Remove captured piece if any.
+        if move.capture:
+            delta_x = ( move.src[0] - move.dst[0] ) // 2
+            delta_y = ( move.src[1] - move.dst[1] ) // 2
+            captured_piece = ( move.dst[0] + delta_x, move.dst[1] + delta_y )
+            undo_key['cp_position'] = captured_piece
+            undo_key['cp_type'] = self.state[captured_piece[1]][captured_piece[0]]
+            self.state[captured_piece[1]][captured_piece[0]] = EMPTY
+
+        # Check if the game is over.
+        if self._is_game_over():
+            self.game_over = True
+        
+        return undo_key
+
+
+    def undo_temporary_update(self, undo_key):
+        '''
+        Reverts a temporary update based on the undo_key provided.
+        '''
+
+        move = undo_key['move']
+
+        # Unpromote piece if there was any promotion.
+        if move.promote:
+            self.state[move.dst[1]][move.dst[0]] //= 3
+
+        # Return displaced piece to its original position.
+        self.state[move.src[1]][move.src[0]] = self.state[move.dst[1]][move.dst[0]]
+        self.state[move.dst[1]][move.dst[0]] = EMPTY
+
+        # Return any captured pieces to the board.
+        if move.capture:
+            self.state[ undo_key['cp_position'][1] ][ undo_key['cp_position'][0] ] = undo_key['cp_type']
+
+        self.game_over = False
 
 
     def get_move_features_values(self, move):
@@ -291,9 +359,9 @@ class Board:
         and then undoes the temporary move.
         '''
         
-        undo_key = self._temporary_update(move)
+        undo_key = self.temporary_update(move)
         values   = self.player_in_turn.compute_features()
-        self._undo_temporary_update(undo_key)
+        self.undo_temporary_update(undo_key)
 
         return values
 
@@ -346,7 +414,7 @@ class Board:
 
     def _is_game_over(self):
         '''
-        Check if there are any pieces remaining for the color opposite to the
+        Checks if there are any pieces remaining for the color opposite to the
         current player.
         '''
 
@@ -360,60 +428,6 @@ class Board:
                     piece_found = True
 
         return not piece_found
-
-
-    def _temporary_update(self, move):
-        '''
-        Updates the board without showing any changes to the user and produces an undo key
-        to undo the update.
-
-        This function assumes the move provided is legal.
-        '''
-
-        undo_key = { 'move': move }
-
-        # Update location of the moving piece and promote piece if neccesary.
-        self.state[move.dst[1]][move.dst[0]] = self.state[move.src[1]][move.src[0]]
-        self.state[move.src[1]][move.src[0]] = EMPTY
-        if move.promote:
-            self.state[move.dst[1]][move.dst[0]] *= 3
-
-        # Remove captured piece if any.
-        if move.capture:
-            delta_x = ( move.src[0] - move.dst[0] ) // 2
-            delta_y = ( move.src[1] - move.dst[1] ) // 2
-            captured_piece = ( move.dst[0] + delta_x, move.dst[1] + delta_y )
-            undo_key['cp_position'] = captured_piece
-            undo_key['cp_type'] = self.state[captured_piece[1]][captured_piece[0]]
-            self.state[captured_piece[1]][captured_piece[0]] = EMPTY
-
-        # Check if the game is over.
-        if self._is_game_over():
-            self.game_over = True
-        
-        return undo_key
-
-
-    def _undo_temporary_update(self, undo_key):
-        '''
-        Undoes a temporary update based on the undo_key provided.
-        '''
-
-        move = undo_key['move']
-
-        # Unpromote piece if there was any promotion.
-        if move.promote:
-            self.state[move.dst[1]][move.dst[0]] //= 3
-
-        # Return displaced piece to its original position.
-        self.state[move.src[1]][move.src[0]] = self.state[move.dst[1]][move.dst[0]]
-        self.state[move.dst[1]][move.dst[0]] = EMPTY
-
-        # Return any captured pieces to the board.
-        if move.capture:
-            self.state[ undo_key['cp_position'][1] ][ undo_key['cp_position'][0] ] = undo_key['cp_type']
-
-        self.game_over = False
 
 
 

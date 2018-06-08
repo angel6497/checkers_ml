@@ -2,7 +2,7 @@ import numpy as np
 
 class LinearRegressionModel:
     '''
-    LinearRegressionModel class
+    Linear Regression Model class
 
     This class implements a machine learning linear regression model. The model is trained
     using stochastic gradient descent to allow online machine learning applications.
@@ -14,7 +14,7 @@ class LinearRegressionModel:
         self.learning_rate = learning_rate
         self.alpha         = alpha
 
-        self.coefs_ = np.zeros(self.dimension + 1)
+        self.coefs_ = np.zeros(self.dimension)
 
 
     def predict(self, x):
@@ -23,7 +23,6 @@ class LinearRegressionModel:
         '''
         
         x = np.array(x)
-        x = np.insert(x, 0, 1) 
 
         return np.dot(x, self.coefs_)
 
@@ -36,7 +35,6 @@ class LinearRegressionModel:
         for curr_x, curr_y in zip(X, y):
 
             pred_score  = self.predict(curr_x)
-            curr_x      = np.insert(curr_x, 0, 1)
             
             self.coefs_ = ( self.coefs_ + ( self.learning_rate * ( ((curr_y - pred_score) * curr_x) 
                                                                  - (self.alpha * self.coefs_) ) ) )

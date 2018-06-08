@@ -95,6 +95,9 @@ class CheckersSwingGUI():
 
         response_map = {'0': 'exit',
                         '1': 'restart'}
+        
+        if not winner:
+            winner = 'tie'
 
         self.GUI.stdin.write('game_over {} \n'.format(winner))
         self.GUI.stdin.flush()

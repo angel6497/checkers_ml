@@ -8,10 +8,13 @@ from abc import ABC, abstractmethod
 from . import features
 from . import model
 
+import pdb
 
 class Player(ABC):
     '''
-    Abstract player class that declares the methods that are required by the game.
+    Abstract player class
+    
+    Declares the methods that are required by the game.
     '''
 
     def __init__(self, color, board):
@@ -30,7 +33,7 @@ class Player(ABC):
 
 class RealPlayer(Player):
     '''
-    Real player class.
+    Real player class
 
     This class allows a real player to interact with the GUI and make a move.
     '''
@@ -51,12 +54,13 @@ class MLPlayer(Player):
     and use an arbitrary machine learning model to play and train.
     '''
 
-    def __init__(self, color, board, save_file='parameters.pickle'):
+    def __init__(self, color, board, save_file='parameters.pickle', simple_features=False):
         
         super().__init__(color, board)
 
         self.learning_rate = 0.01
-        self.regularization_const = 0.005
+        self.regularization_const = 0 #0.005
+        self.search_depth = 3
 
         self.save_file = save_file
         self.records_X = None
@@ -66,6 +70,7 @@ class MLPlayer(Player):
         if save_file_dir and not os.path.exists(save_file_dir):
             os.makedirs(save_file_dir)
 
+        self.set_features(simple_features)
         self.set_model()
 
         dt = datetime.datetime.today().strftime('%Y-%m-%d_%H:%M:%S')
@@ -80,6 +85,11 @@ class MLPlayer(Player):
         pass
 
     
+    @abstractmethod
+    def set_features(self, simple_features):
+        pass
+
+
     @abstractmethod
     def set_model(self):
         pass 
@@ -126,26 +136,88 @@ class MLPlayer(Player):
         the optimal one.
         '''
 
-        move_scores = {}
-
         legal_moves = self.board.get_all_legal_moves(self.color)
 
         if not legal_moves:
             return None
 
-        for move in legal_moves:
-            move_features = self.board.get_move_features_values(move)
-            score = self.model.predict( np.array(move_features) )
-            
-            if not move_scores.get(score):
-                move_scores[score] = []
+        # Use epsilon-greedy policy to pick next move with %5 chance of exploring. 
+        if random.random() < 0.05:
+            return random.choice(legal_moves)
 
-            move_scores[score].append(move)
-        
-        best_moves = move_scores[max(move_scores.keys())]
-        
-        return random.choice(best_moves)
+        else:
+            best_score = float('-inf')
+            best_move  = None
+            next_color = 'white' if self.color == 'black' else 'black'
 
+            for move in legal_moves:
+                score = self.minimax_search(move, 'min', next_color, 0)
+                if score > best_score:
+                    best_score = score
+                    best_move  = move
+
+            return best_move
+
+
+    def minimax_search(self, move, agent, color, depth):
+        '''
+        Does a minimax look ahead search from the position resulting after picking the given move.
+        '''
+
+        next_agent = 'min' if agent == 'max' else 'max'
+        next_color = 'white' if color == 'black' else 'black'
+
+        # Perform the given move as a temporary update.
+        undo_key = self.board.temporary_update(move)
+
+        # Check if a second jump is available.
+        if move.capture:
+            sequential_jumps = [ m for m in self.board.get_legal_moves(move.dst[0], move.dst[1], cache=False) if m.capture ]
+        else:
+            sequential_jumps = None
+
+        # A second available jump means the same player gets to move again, but has to pick one of those jumps.
+        if sequential_jumps:
+            legal_moves = sequential_jumps
+            agent, next_agent = next_agent, agent
+        else:
+            legal_moves = self.board.get_all_legal_moves(color, cache=False)
+
+        # A player with no possible moves loses the game.
+        if not legal_moves:
+            self.board.undo_temporary_update(undo_key)
+            if self.color == color:
+                return -1
+            else:
+                return 1
+
+        # If the max depth is reached, bootstrap the value using the value function approximation.
+        if depth == self.search_depth:
+            self.board.undo_temporary_update(undo_key)
+            return self.evaluate(self.compute_features())
+
+        if agent == 'min':
+            best_score = float('inf')
+        elif agent == 'max':
+            best_score = float('-inf')
+
+        for next_move in legal_moves:
+            if sequential_jumps:
+                score = self.minimax_search(next_move, next_agent, color, depth)
+            else:
+                score = self.minimax_search(next_move, next_agent, next_color, depth+1)
+
+            # Update the best score if necessary.
+            if agent == 'min' and score < best_score:
+                best_score = score
+            elif agent == 'max' and score > best_score:
+                best_score = score
+
+        # Revert the temporary move.
+        self.board.undo_temporary_update(undo_key)
+
+        return best_score
+             
 
     def add_record(self, x, y):
         '''
@@ -203,11 +275,11 @@ class LinearRegressionPlayer(MLPlayer):
     passed to the model.
     '''
 
-    def __init__(self, color, board, save_file='parameters.pickle'):
-
-        super().__init__(color, board, save_file)
-
-        # Initialize feature objects to compute simplified version of the board state.
+    def set_features(self, simple_features):
+        '''
+        Initialize the features to be used for the value function approximator.
+        '''
+        
         if self.color == 'black':
             self.features = [ features.BlackPiecesFeature(),
                               features.WhitePiecesFeature(),
@@ -215,6 +287,12 @@ class LinearRegressionPlayer(MLPlayer):
                               features.WhiteKingsFeature(),
                               features.BlackThreatenedFeature(),
                               features.WhiteThreatenedFeature() ]
+
+            if not simple_features:
+                for col in range(8):
+                    for row in range(8):
+                        if (col % 2 == 0 and row % 2 == 0) or (col % 2 == 1 and row % 2 == 1):
+                            self.features.append(features.PositionValueFeature(col, row, self.color))
         else:
             self.features = [ features.WhitePiecesFeature(),
                               features.BlackPiecesFeature(),
@@ -222,6 +300,13 @@ class LinearRegressionPlayer(MLPlayer):
                               features.BlackKingsFeature(),
                               features.WhiteThreatenedFeature(),
                               features.BlackThreatenedFeature() ]
+
+            if not simple_features:
+                for col in reversed(range(8)):
+                    for row in reversed(range(8)):
+                        if (col % 2 == 0 and row % 2 == 0) or (col % 2 == 1 and row % 2 == 1):
+                            self.features.append(features.PositionValueFeature(col, row, self.color))
+
 
 
     def compute_features(self):
@@ -240,20 +325,20 @@ class LinearRegressionPlayer(MLPlayer):
         try:
             self.model = pickle.load( open(self.save_file, 'rb') )
         except (FileNotFoundError, EOFError, pickle.UnpicklingError):
-            self.model = model.LinearRegressionModel(6, self.learning_rate, self.regularization_const) 
+            self.model = model.LinearRegressionModel(len(self.features), self.learning_rate, self.regularization_const) 
 
 
     # Override
     def get_parameters_string(self):
         '''
-        Retunrs a formated string with the current values of all the features.
+        Returns a formated string with the current values of all the features.
         '''
 
-        line_format = '{:.<33}: {: >7.2f}\n'
+        line_format = '{:.<33}: {: >7.4f}\n'
 
-        lines = line_format.format('Constant', self.model.coefs_[0])
-        for i in range(1, len(self.features) + 1):
-            lines += ( line_format.format(self.features[i-1].get_name(), self.model.coefs_[i]) )
+        lines = ''
+        for i in range(0, len(self.features)):
+            lines += ( line_format.format(self.features[i].get_name(), self.model.coefs_[i]) )
 
         return lines
 
@@ -264,10 +349,13 @@ class LinearRegressionPlayer(MLPlayer):
         Use the current movel to evaluate a certain board state.
         '''
 
-        # Return 100 if the game is won or -100 if the game is lost.
+        # Return 1 if the game is won, -1 if the game is lost, or 0 if it is a tie.
+        if self.board.game_over == 3:
+            return 0
+
         if x[0] == 0:
-            return -100
+            return -1
         elif x[1] == 0:
-            return 100
+            return 1 
 
         return super().evaluate(x)

@@ -1,5 +1,6 @@
 import os
 import logging
+from collections import deque
 
 from checkersml import board, player, features
 from swinggui import CheckersSwingGUI
@@ -37,11 +38,11 @@ class CheckersController:
         b = board.Board()
 
         if real_players == 0:
-            player1 = player.LinearRegressionPlayer('black', b, save_file='pickled_models/black_trained_model.pickle')
-            player2 = player.LinearRegressionPlayer('white', b, save_file='pickled_models/white_trained_model.pickle')
+            player1 = player.LinearRegressionPlayer('black', b, save_file='pickled_models/model1.pickle')
+            player2 = player.LinearRegressionPlayer('white', b, save_file='pickled_models/zeros.pickle')
         elif real_players == 1:
             player1 = player.RealPlayer('black', b)
-            player2 = player.LinearRegressionPlayer('white', b, save_file='pickled_models/white_trained_model.pickle')
+            player2 = player.LinearRegressionPlayer('white', b, save_file='pickled_models/model1.pickle')
         else:
             self.no_train = True
             player1 = player.RealPlayer('black', b)
@@ -109,8 +110,17 @@ class CheckersController:
                     if not self.no_train:
                         trainee.fit_data()
 
-                gui.set_status('Game Over')
-                response = gui.game_over( b.player_in_turn.color )
+                winner = b.player_in_turn.color
+
+                if b.game_over == 2:
+                    gui.set_status('No moves available')
+                    gui.set_status('Game Over')
+                elif b.game_over == 3:
+                    gui.set_status('Tie')
+                    gui.set_status('Game Over')
+                    winner = None
+
+                response = gui.game_over( winner )
                 
                 if response == 'restart':
                     b.__init__()
@@ -132,14 +142,18 @@ class CheckersController:
     
         b = board.Board()
 
-        black_player = player.LinearRegressionPlayer('black', b, save_file='pickled_models/black_trained_model.pickle')
-        white_player = player.LinearRegressionPlayer('white', b, save_file='pickled_models/white_trained_model.pickle')
+        black_player = player.LinearRegressionPlayer('black', b, save_file='pickled_models/model1.pickle', simple_features=False)
+        white_player = player.LinearRegressionPlayer('white', b, save_file='pickled_models/zeros.pickle')
 
         trainee = black_player
         
-        curr_cycle        = 1
-        trainee_wins      = 0
-        total_turns       = 0
+        curr_cycle   = 1
+
+        trainee_wins  = 0
+        trainee_ties  = 0
+        trainee_loses = 0
+
+        total_turns  = 0
 
         while(True):
 
@@ -155,8 +169,6 @@ class CheckersController:
                 while(not b.game_over):
 
                     turn_count += 1
-                    if turn_count >= 1000: 
-                        break
 
                     move = b.player_in_turn.make_move()
 
@@ -193,8 +205,13 @@ class CheckersController:
                         if not self.no_data:
                             trainee.save_records(cycle=curr_cycle)
 
-                        if b.player_in_turn.color == trainee.color:
-                            trainee_wins += 1
+                        if b.game_over < 3:
+                            if b.player_in_turn.color == trainee.color:
+                                trainee_wins += 1
+                            else:
+                                trainee_loses += 1
+                        elif b.game_over == 3:
+                            trainee_ties += 1
 
                         total_turns += turn_count
 
@@ -205,11 +222,13 @@ class CheckersController:
                 self.logger.info( '---------------------------------------------' )
                 self.logger.info( 'Current cycle: {}\n'.format(curr_cycle) )
                 self.logger.info( 'Total turns: {}'.format(turn_count) )
-                self.logger.info( 'Average turns per match: {:.2f}\n'.format(total_turns/curr_cycle) )
+                self.logger.info( 'Average turns per match: {:.2f}\n'.format( total_turns/curr_cycle ) )
                 self.logger.info( 'Trainee parameters:' )
                 for line in trainee.get_parameters_string().split('\n'):
-                    self.logger.info( '\t{}'.format(line) )
-                self.logger.info( 'Trainee win rate: {:.2%}'.format(trainee_wins/curr_cycle) )
+                    self.logger.info( '   {}'.format(line) )
+                self.logger.info( 'Trainee win rate:  {:.2%}'.format( trainee_wins/curr_cycle ) )
+                self.logger.info( 'Trainee tie rate:  {:.2%}'.format( trainee_ties/curr_cycle ) )
+                self.logger.info( 'Trainee lose rate: {:.2%}'.format (trainee_loses/curr_cycle ) )
                 self.logger.info( '---------------------------------------------\n' )
                 
                 # Stop training is max number of cycles if reached.
@@ -224,11 +243,13 @@ class CheckersController:
                 self.logger.info( '---------------------------------------------' )
                 self.logger.info( 'Current cycle: {}\n'.format(curr_cycle) )
                 self.logger.info( 'Total turns: {}'.format(turn_count) )
-                self.logger.info( 'Average turns per match: {:.2f}\n'.format(total_turns/curr_cycle) )
+                self.logger.info( 'Average turns per match: {:.2f}\n'.format( total_turns/(curr_cycle - 1)) )
                 self.logger.info( 'Trainee parameters:' )
                 for line in trainee.get_parameters_string().split('\n'):
                     self.logger.info( '   {}'.format(line) )
-                self.logger.info( 'Trainee win rate: {:.2%}'.format(trainee_wins/curr_cycle) )
+                self.logger.info( 'Trainee win rate:  {:.2%}'.format( trainee_wins/(curr_cycle - 1) ) )
+                self.logger.info( 'Trainee tie rate:  {:.2%}'.format( trainee_ties/(curr_cycle - 1) ) )
+                self.logger.info( 'Trainee lose rate: {:.2%}'.format( trainee_loses/(curr_cycle - 1) ) )
                 self.logger.info( '---------------------------------------------\n' )
 
                 sys.exit(0)

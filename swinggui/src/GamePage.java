@@ -160,15 +160,23 @@ public class GamePage extends JFrame implements WindowListener {
                         break;
 
                     case "game_over":
-                        String color = buffer.remove();
+                        String gameResult = buffer.remove();
                         String winner = "";
-                        if (color.equals("black")) {
+                        if (gameResult.equals("black")) {
                             winner = "Black Player";
-                        } else if (color.equals("white")) {
+                        } else if (gameResult.equals("white")) {
                             winner = "White Player";
+                        } else if (gameResult.equals("tie")) {
+                            winner = "";
                         }
 
-                        JLabel gameOverMsg = new JLabel(winner + " wins!", JLabel.CENTER);
+                        JLabel gameOverMsg;
+                        if (!winner.isEmpty()) {
+                            gameOverMsg = new JLabel(winner + " wins!", JLabel.CENTER);
+                        } else { 
+                            gameOverMsg = new JLabel("It is a tie!", JLabel.CENTER);
+                        }
+
                         gameOverMsg.setFont( gameOverMsg.getFont().deriveFont(28) );
                         Object[] options = {"Exit Game", "Play Again"};
                         
