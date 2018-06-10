@@ -2,6 +2,7 @@ import os
 import pickle
 import random
 import datetime
+import collections
 import numpy as np
 from abc import ABC, abstractmethod
 
@@ -9,12 +10,17 @@ from . import features
 from . import model
 
 import pdb
+from pprint import pprint
+
+
+State = collections.namedtuple('State', ['score', 'features'])
+
 
 class Player(ABC):
     '''
     Abstract player class
     
-    Declares the methods that are required by the game.
+    Declares the methods that are required by the checkers engine to play a game.
     '''
 
     def __init__(self, color, board):
@@ -54,23 +60,38 @@ class MLPlayer(Player):
     and use an arbitrary machine learning model to play and train.
     '''
 
-    def __init__(self, color, board, save_file='parameters.pickle', simple_features=False):
+    def __init__(self, color, board, train         = False, 
+                                     learning_rate = 0,
+                                     reg_const     = 0,
+                                     lambda_const  = 0,
+                                     search_depth  = 0,
+                                     epsilon       = 0,
+                                     save_file     = 'parameters.pickle', 
+                                     no_records    = False):
         
         super().__init__(color, board)
 
-        self.learning_rate = 0.01
-        self.regularization_const = 0 #0.005
-        self.search_depth = 3
+        self.train = train
 
-        self.save_file = save_file
-        self.records_X = None
-        self.records_y = None
+        self.curr_cycle = 1
+        self.no_records = no_records
+
+        self.learning_rate = learning_rate
+        self.reg_const     = reg_const
+        self.lambda_const  = lambda_const
+        self.search_depth  = search_depth
+        self.epsilon       = epsilon
+
+        self.save_file  = save_file
+        self.records_X  = None
+        self.records_y  = None
+        self.prev_state = None
 
         save_file_dir = os.path.dirname(save_file)
         if save_file_dir and not os.path.exists(save_file_dir):
             os.makedirs(save_file_dir)
 
-        self.set_features(simple_features)
+        self.set_features()
         self.set_model()
 
         dt = datetime.datetime.today().strftime('%Y-%m-%d_%H:%M:%S')
@@ -86,7 +107,7 @@ class MLPlayer(Player):
 
     
     @abstractmethod
-    def set_features(self, simple_features):
+    def set_features(self):
         pass
 
 
@@ -142,7 +163,7 @@ class MLPlayer(Player):
             return None
 
         # Use epsilon-greedy policy to pick next move with %5 chance of exploring. 
-        if random.random() < 0.05:
+        if random.random() < self.epsilon:
             return random.choice(legal_moves)
 
         else:
@@ -151,10 +172,20 @@ class MLPlayer(Player):
             next_color = 'white' if self.color == 'black' else 'black'
 
             for move in legal_moves:
-                score = self.minimax_search(move, 'min', next_color, 0)
+                score, leaf_features = self.minimax_search(move, 'min', next_color, 0)
                 if score > best_score:
-                    best_score = score
-                    best_move  = move
+                    best_score  = score
+                    best_move   = move
+                    pv_features = leaf_features
+
+            # Call the TD(lambda) function to update the model based on the next state.
+            if self.train:
+                next_state = State(best_score, np.array(pv_features))
+                self.model.td_lambda(self.prev_state, next_state)
+                self.prev_state = next_state
+
+                if not self.no_records:
+                    self.add_record(pv_features, best_score)
 
             return best_move
 
@@ -185,16 +216,18 @@ class MLPlayer(Player):
 
         # A player with no possible moves loses the game.
         if not legal_moves:
+            leaf_features = self.compute_features()
             self.board.undo_temporary_update(undo_key)
             if self.color == color:
-                return -1
+                return -1, leaf_features
             else:
-                return 1
+                return  1, leaf_features
 
         # If the max depth is reached, bootstrap the value using the value function approximation.
         if depth == self.search_depth:
             self.board.undo_temporary_update(undo_key)
-            return self.evaluate(self.compute_features())
+            features = self.compute_features()
+            return self.evaluate(features), features
 
         if agent == 'min':
             best_score = float('inf')
@@ -203,20 +236,22 @@ class MLPlayer(Player):
 
         for next_move in legal_moves:
             if sequential_jumps:
-                score = self.minimax_search(next_move, next_agent, color, depth)
+                score, leaf_features = self.minimax_search(next_move, next_agent, color, depth)
             else:
-                score = self.minimax_search(next_move, next_agent, next_color, depth+1)
+                score, leaf_features = self.minimax_search(next_move, next_agent, next_color, depth+1)
 
             # Update the best score if necessary.
             if agent == 'min' and score < best_score:
-                best_score = score
+                best_score  = score
+                pv_features = leaf_features
             elif agent == 'max' and score > best_score:
-                best_score = score
+                best_score  = score
+                pv_features = leaf_features
 
         # Revert the temporary move.
         self.board.undo_temporary_update(undo_key)
 
-        return best_score
+        return best_score, pv_features
              
 
     def add_record(self, x, y):
@@ -260,22 +295,33 @@ class MLPlayer(Player):
 
         full_records = np.c_[self.records_X, self.records_y]
 
-        np.savetxt(records_file, full_records, delimiter=',')
+        np.savetxt(records_file, full_records, delimiter=',', fmt='%1.4f')
+
+
+    def reset(self):
+        '''
+        Does resets some variables in the model that depend on the current game and
+        saves the records if any.
+        '''
+
+        self.model.reset()
+        self.save_records(cycle=self.curr_cycle)
+        self.records_X = None
+        self.records_y = None
+
+        self.curr_cycle += 1
 
 
 
-class LinearRegressionPlayer(MLPlayer):
+class LinearModelPlayer(MLPlayer):
     '''
-    LinearRegressionPlayer class.
+    LinearModelPlayer class.
     
     This player class uses a linear regression model to assign values to board positions
     in order to chose the optimal move among the list of possible legal moves.
-
-    To represent the board, six features are extracted from a board state before they are
-    passed to the model.
     '''
 
-    def set_features(self, simple_features):
+    def set_features(self):
         '''
         Initialize the features to be used for the value function approximator.
         '''
@@ -288,11 +334,11 @@ class LinearRegressionPlayer(MLPlayer):
                               features.BlackThreatenedFeature(),
                               features.WhiteThreatenedFeature() ]
 
-            if not simple_features:
-                for col in range(8):
-                    for row in range(8):
-                        if (col % 2 == 0 and row % 2 == 0) or (col % 2 == 1 and row % 2 == 1):
-                            self.features.append(features.PositionValueFeature(col, row, self.color))
+            for col in range(8):
+                for row in range(8):
+                    if (col % 2 == 0 and row % 2 == 0) or (col % 2 == 1 and row % 2 == 1):
+                        self.features.append(features.PositionValueFeature(col, row, self.color))
+
         else:
             self.features = [ features.WhitePiecesFeature(),
                               features.BlackPiecesFeature(),
@@ -301,11 +347,10 @@ class LinearRegressionPlayer(MLPlayer):
                               features.WhiteThreatenedFeature(),
                               features.BlackThreatenedFeature() ]
 
-            if not simple_features:
-                for col in reversed(range(8)):
-                    for row in reversed(range(8)):
-                        if (col % 2 == 0 and row % 2 == 0) or (col % 2 == 1 and row % 2 == 1):
-                            self.features.append(features.PositionValueFeature(col, row, self.color))
+            for col in reversed(range(8)):
+                for row in reversed(range(8)):
+                    if (col % 2 == 0 and row % 2 == 0) or (col % 2 == 1 and row % 2 == 1):
+                        self.features.append(features.PositionValueFeature(col, row, self.color))
 
 
 
@@ -325,7 +370,10 @@ class LinearRegressionPlayer(MLPlayer):
         try:
             self.model = pickle.load( open(self.save_file, 'rb') )
         except (FileNotFoundError, EOFError, pickle.UnpicklingError):
-            self.model = model.LinearRegressionModel(len(self.features), self.learning_rate, self.regularization_const) 
+            self.model = model.LinearRegressionModel( dimension     = len(self.features),
+                                                      learning_rate = self.learning_rate,
+                                                      alpha         = self.reg_const,
+                                                      lambda_const  = self.lambda_const ) 
 
 
     # Override
@@ -346,7 +394,8 @@ class LinearRegressionPlayer(MLPlayer):
     # Override
     def evaluate(self, x):
         '''
-        Use the current movel to evaluate a certain board state.
+        Use the current model to evaluate a certain board state. 
+        Predefined values are used for terminal states.
         '''
 
         # Return 1 if the game is won, -1 if the game is lost, or 0 if it is a tie.

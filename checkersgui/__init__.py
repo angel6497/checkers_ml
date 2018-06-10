@@ -1,0 +1,1 @@
+from .checkersgui import CheckersSwingGUI

@@ -36,7 +36,7 @@ class WhitePiecesFeature(Feature):
                 if tile < 0:
                     value += 1
 
-        return value
+        return value/12
 
 
 
@@ -56,7 +56,7 @@ class BlackPiecesFeature(Feature):
                 if tile > 0:
                     value += 1
 
-        return value
+        return value/12
 
 
 
@@ -76,7 +76,7 @@ class WhiteKingsFeature(Feature):
                 if tile == board.WHITE_KING:
                     value += 1
 
-        return value
+        return value/12
 
 
 
@@ -96,7 +96,7 @@ class BlackKingsFeature(Feature):
                 if tile == board.BLACK_KING:
                     value += 1
 
-        return value
+        return value/12
 
 
 
@@ -121,7 +121,7 @@ class WhiteThreatenedFeature(Feature):
                 threatened_piece = ( move.dst[0] + delta_x, move.dst[1] + delta_y )
                 threatened_pieces.add(threatened_piece)
 
-        return len(threatened_pieces)
+        return len(threatened_pieces)/12
 
 
 
@@ -145,7 +145,7 @@ class BlackThreatenedFeature(Feature):
                 threatened_piece = ( move.dst[0] + delta_x, move.dst[1] + delta_y )
                 threatened_pieces.add(threatened_piece)
 
-        return len(threatened_pieces)
+        return len(threatened_pieces)/12
 
 
 

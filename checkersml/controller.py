@@ -3,18 +3,19 @@ import logging
 from collections import deque
 
 from checkersml import board, player, features
-from swinggui import CheckersSwingGUI
+from checkersgui import CheckersSwingGUI
 
 import sys
 import pdb
 from pprint import pprint
+import numpy as np
 
 
 class CheckersController:
     '''
     Checkers Controller class.
 
-    This class uses the checkersml and swinggui modules to either train a ML Checkers 
+    This class uses the checkersml and checkersgui modules to either train a ML Checkers 
     player model by having it play against itself or to provide regular game functionality.
     '''
 
@@ -24,9 +25,6 @@ class CheckersController:
         self.no_train = no_train
         self.no_data  = no_data
         
-        if not os.path.isdir('parameters'):
-            os.mkdir('parameters')
-
 
     def play(self, real_players):
         '''
@@ -38,11 +36,33 @@ class CheckersController:
         b = board.Board()
 
         if real_players == 0:
-            player1 = player.LinearRegressionPlayer('black', b, save_file='pickled_models/model1.pickle')
-            player2 = player.LinearRegressionPlayer('white', b, save_file='pickled_models/zeros.pickle')
+            player1 = player.LinearModelPlayer('black', b, train         = True,
+                                                           learning_rate = 0.01,
+                                                           reg_const     = 0,
+                                                           lambda_const  = 0.7,
+                                                           search_depth  = 3,
+                                                           epsilon       = 0.05,
+                                                           save_file     = 'pickled_models/model_test3.pickle')
+
+            player2 = player.LinearModelPlayer('white', b, train         = False,
+                                                           learning_rate = 0,
+                                                           reg_const     = 0,
+                                                           lambda_const  = 0,
+                                                           search_depth  = 0,
+                                                           epsilon       = 1,
+                                                           save_file     = 'pickled_models/zeros.pickle')
+
         elif real_players == 1:
-            player1 = player.RealPlayer('black', b)
-            player2 = player.LinearRegressionPlayer('white', b, save_file='pickled_models/model1.pickle')
+            player1 = player.LinearModelPlayer('black', b, train         = True,
+                                                           learning_rate = 0.01,
+                                                           reg_const     = 0,
+                                                           lambda_const  = 0.7,
+                                                           search_depth  = 3,
+                                                           epsilon       = 0.05,
+                                                           save_file     = 'pickled_models/model_test3.pickle')
+
+            player2 = player.RealPlayer('white', b)
+
         else:
             self.no_train = True
             player1 = player.RealPlayer('black', b)
@@ -51,12 +71,10 @@ class CheckersController:
         b.set_players(player1, player2)
 
         if real_players < 2:
-            trainee = player2
+            trainee = player1
 
         gui = CheckersSwingGUI()
         gui.display( str(b) )
-
-        prev_features = None
 
         while(True):
 
@@ -71,45 +89,16 @@ class CheckersController:
 
             # Current player has no possible legal moves, so turn is passed to the next one.
             if not move:
-                b.pass_turn()
-                continue
+                raise ValueError('Player didn\'t pick a move.')
 
             try:
                 b.update(move)
             except ValueError as e:
                 gui.show_message( str(e) )
 
-            # Save the board features after the trainee player moves, but don't assign a score
-            # to the board state until the other player has made a move too. This generates new 
-            # training data.
-            if not self.no_train:
-                if b.player_in_turn.color != trainee.color and not prev_features:
-                    prev_features = trainee.compute_features()
-                elif b.player_in_turn.color == trainee.color and prev_features:
-                    score = trainee.evaluate(trainee.compute_features())
-                    trainee.add_record(prev_features, score)
-                    prev_features = None
-
             gui.display( str(b) )
 
             if b.game_over:
-                # Make sure to record the winning or loosing state information.
-                # This step is critical during the first cycles because it generates experience
-                # propagation.
-                if not self.no_train:
-                    if b.player_in_turn.color == trainee.color:
-                        prev_features = trainee.pop_record()[0]
-
-                    score = trainee.evaluate(trainee.compute_features())
-                    trainee.add_record(prev_features, score)
-
-                    if not self.no_data:
-                        trainee.save_records()
-
-                    # Train on the newly generated data.
-                    if not self.no_train:
-                        trainee.fit_data()
-
                 winner = b.player_in_turn.color
 
                 if b.game_over == 2:
@@ -125,8 +114,8 @@ class CheckersController:
                 if response == 'restart':
                     b.__init__()
                     b.set_players(player1, player2)
-                    prev_features = None
                     gui.display( str(b) )
+                    trainee.reset()
                 elif response == 'exit':
                     gui.exit()
                     sys.exit(0)
@@ -142,12 +131,26 @@ class CheckersController:
     
         b = board.Board()
 
-        black_player = player.LinearRegressionPlayer('black', b, save_file='pickled_models/model1.pickle', simple_features=False)
-        white_player = player.LinearRegressionPlayer('white', b, save_file='pickled_models/zeros.pickle')
+        player1 = player.LinearModelPlayer('black', b, train         = True,
+                                                       learning_rate = 0.01,
+                                                       reg_const     = 0,
+                                                       lambda_const  = 0.7,
+                                                       search_depth  = 3,
+                                                       epsilon       = 0.05,
+                                                       save_file     = 'pickled_models/model_test3.pickle')
 
-        trainee = black_player
+        player2 = player.LinearModelPlayer('white', b, train         = False,
+                                                       learning_rate = 0,
+                                                       reg_const     = 0,
+                                                       lambda_const  = 0,
+                                                       search_depth  = 0,
+                                                       epsilon       = 1,
+                                                       save_file     = 'pickled_models/zeros.pickle')
+
+        b.set_players(player1, player2)
+        trainee = player1
         
-        curr_cycle   = 1
+        curr_cycle = 1
 
         trainee_wins  = 0
         trainee_ties  = 0
@@ -159,12 +162,7 @@ class CheckersController:
 
             try:
 
-                # Reset the board values on every cycle.
-                b.__init__()
-                b.set_players(black_player, white_player)
-
-                prev_features = None
-                turn_count    = 0
+                turn_count = 0
 
                 while(not b.game_over):
 
@@ -174,37 +172,14 @@ class CheckersController:
 
                     # Current player has no possible legal moves, so turn is passed to the next one.
                     if not move:
-                        b.pass_turn()
-                        continue
+                        raise ValueError('Player didn\'t pick a move.')
 
                     try:
                         b.update(move)
                     except ValueError:
                         pass
 
-                    # Save the board features after the trainee player moves, but don't assign a score
-                    # to the board state until the other player has made a move too. This generates new 
-                    # training data.
-                    if b.player_in_turn.color != trainee.color and not prev_features:
-                        prev_features = trainee.compute_features()
-                    elif b.player_in_turn.color == trainee.color and prev_features:
-                        score = trainee.evaluate(trainee.compute_features())
-                        trainee.add_record(prev_features, score)
-                        prev_features = None
-
                     if b.game_over:
-                        # Make sure to record the winning or loosing state information.
-                        # This step is critical during the first cycles because it generates experience
-                        # propagation.
-                        if b.player_in_turn.color == trainee.color:
-                            prev_features = trainee.pop_record()[0]
-
-                        score = trainee.evaluate(trainee.compute_features())
-                        trainee.add_record(prev_features, score)
-
-                        if not self.no_data:
-                            trainee.save_records(cycle=curr_cycle)
-
                         if b.game_over < 3:
                             if b.player_in_turn.color == trainee.color:
                                 trainee_wins += 1
@@ -215,21 +190,7 @@ class CheckersController:
 
                         total_turns += turn_count
 
-                # Train on the newly generated data.
-                if not self.no_train:
-                    trainee.fit_data()
-
-                self.logger.info( '---------------------------------------------' )
-                self.logger.info( 'Current cycle: {}\n'.format(curr_cycle) )
-                self.logger.info( 'Total turns: {}'.format(turn_count) )
-                self.logger.info( 'Average turns per match: {:.2f}\n'.format( total_turns/curr_cycle ) )
-                self.logger.info( 'Trainee parameters:' )
-                for line in trainee.get_parameters_string().split('\n'):
-                    self.logger.info( '   {}'.format(line) )
-                self.logger.info( 'Trainee win rate:  {:.2%}'.format( trainee_wins/curr_cycle ) )
-                self.logger.info( 'Trainee tie rate:  {:.2%}'.format( trainee_ties/curr_cycle ) )
-                self.logger.info( 'Trainee lose rate: {:.2%}'.format (trainee_loses/curr_cycle ) )
-                self.logger.info( '---------------------------------------------\n' )
+                self.print_info(curr_cycle, turn_count, total_turns, trainee, trainee_wins, trainee_ties, trainee_loses)
                 
                 # Stop training is max number of cycles if reached.
                 curr_cycle += 1
@@ -237,21 +198,33 @@ class CheckersController:
                     self.logger.info('Final trainee win rate: {:.2%}'.format(trainee_wins/max_cycles))
                     sys.exit(0)
 
+                # Reset the board values on every cycle.
+                b.__init__()
+                b.set_players(player1, player2)
+                trainee.reset()
+
             except KeyboardInterrupt:
+                trainee.save_model()
                 self.logger.info( 'Training simulation ended manually.' )
                 self.logger.info( 'Final data: \n' )
-                self.logger.info( '---------------------------------------------' )
-                self.logger.info( 'Current cycle: {}\n'.format(curr_cycle) )
-                self.logger.info( 'Total turns: {}'.format(turn_count) )
-                self.logger.info( 'Average turns per match: {:.2f}\n'.format( total_turns/(curr_cycle - 1)) )
-                self.logger.info( 'Trainee parameters:' )
-                for line in trainee.get_parameters_string().split('\n'):
-                    self.logger.info( '   {}'.format(line) )
-                self.logger.info( 'Trainee win rate:  {:.2%}'.format( trainee_wins/(curr_cycle - 1) ) )
-                self.logger.info( 'Trainee tie rate:  {:.2%}'.format( trainee_ties/(curr_cycle - 1) ) )
-                self.logger.info( 'Trainee lose rate: {:.2%}'.format( trainee_loses/(curr_cycle - 1) ) )
-                self.logger.info( '---------------------------------------------\n' )
+                self.print_info(curr_cycle-1, turn_count, total_turns, trainee, trainee_wins, trainee_ties, trainee_loses)
 
                 sys.exit(0)
                 
 
+    def print_info(self, cycle, turn_count, total_turns, trainee, trainee_wins, trainee_ties, trainee_loses):
+        '''
+        Prints the information gathered after a cycle of training.
+        '''
+
+        self.logger.info( '---------------------------------------------' )
+        self.logger.info( 'Current cycle: {}\n'.format(cycle) )
+        self.logger.info( 'Total turns: {}'.format(turn_count) )
+        self.logger.info( 'Average turns per match: {:.2f}\n'.format( total_turns/cycle ) )
+        self.logger.info( 'Trainee parameters:' )
+        for line in trainee.get_parameters_string().split('\n'):
+            self.logger.info( '   {}'.format(line) )
+        self.logger.info( 'Trainee win rate:  {:.2%}'.format( trainee_wins/cycle ) )
+        self.logger.info( 'Trainee tie rate:  {:.2%}'.format( trainee_ties/cycle ) )
+        self.logger.info( 'Trainee lose rate: {:.2%}'.format (trainee_loses/cycle ) )
+        self.logger.info( '---------------------------------------------\n' )

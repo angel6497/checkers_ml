@@ -157,7 +157,7 @@ class Board:
 
         # Check that the next player can make any moves.
         if not [ self.get_all_legal_moves(self.player_in_turn.color, cache=False) ]:
-            self.game_over = 2 # Game over due to player blocked.
+            self.game_over = 2 # Game over due to player blocked (i.e. no possible moves).
             self.player_in_turn = next(self.players)
 
         if self.no_jump_count > 50:

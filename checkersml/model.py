@@ -8,13 +8,23 @@ class LinearRegressionModel:
     using stochastic gradient descent to allow online machine learning applications.
     '''
 
-    def __init__(self, dimension, learning_rate, alpha):
+    def __init__(self, dimension, learning_rate, alpha, lambda_const):
         
         self.dimension     = dimension
         self.learning_rate = learning_rate
         self.alpha         = alpha
+        self.lambda_const  = lambda_const
 
-        self.coefs_ = np.zeros(self.dimension)
+        self.coefs_      = np.zeros(self.dimension)
+        self.eleg_traces = np.zeros(dimension)
+
+
+    def reset(self):
+        '''
+        Resets variables that are dependant on the current game.
+        '''
+
+        self.eleg_traces = np.zeros(self.dimension)
 
 
     def predict(self, x):
@@ -29,13 +39,26 @@ class LinearRegressionModel:
 
     def partial_fit(self, X, y):
         '''
-        Adjusts the model coefficient using stochastic gradient descent.
+        Adjusts the model coefficients using stochastic gradient descent.
+        This method expects the data of a fully completed episode.
         '''
 
         for curr_x, curr_y in zip(X, y):
 
             pred_score  = self.predict(curr_x)
-            
-            self.coefs_ = ( self.coefs_ + ( self.learning_rate * ( ((curr_y - pred_score) * curr_x) 
-                                                                 - (self.alpha * self.coefs_) ) ) )
+            delta = curr_y - pred_score
+            self.coefs_ = self.coefs_ + ( self.learning_rate * ((delta * curr_x) - (self.alpha * self.coefs_)) )
 
+
+    def td_lambda(self, prev_state, next_state):
+        '''
+        Performs one TD(lambda) update step on the model's weights.
+        This method should be called after every transition step of the agent being trained.
+        '''
+
+        if not prev_state:
+            return
+
+        delta = next_state.score - prev_state.score
+        self.eleg_traces = (self.lambda_const * self.eleg_traces) + prev_state.features
+        self.coefs_ = self.coefs_ + ( delta * self.eleg_traces * self.learning_rate )
