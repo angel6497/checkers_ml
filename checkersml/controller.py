@@ -89,7 +89,7 @@ class CheckersController:
 
             # Current player has no possible legal moves, so turn is passed to the next one.
             if not move:
-                raise ValueError('Player didn\'t pick a move.')
+                raise ValueError("Player didn't pick a move.")
 
             try:
                 b.update(move)
@@ -172,7 +172,7 @@ class CheckersController:
 
                     # Current player has no possible legal moves, so turn is passed to the next one.
                     if not move:
-                        raise ValueError('Player didn\'t pick a move.')
+                        raise ValueError("Player didn't pick a move.")
 
                     try:
                         b.update(move)

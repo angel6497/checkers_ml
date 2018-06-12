@@ -159,6 +159,8 @@ class MLPlayer(Player):
 
         legal_moves = self.board.get_all_legal_moves(self.color)
 
+        assert legal_moves, 'There are no legal moves available.'
+
         if not legal_moves:
             return None
 
