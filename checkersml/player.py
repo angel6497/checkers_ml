@@ -159,12 +159,10 @@ class MLPlayer(Player):
 
         legal_moves = self.board.get_all_legal_moves(self.color)
 
-        assert legal_moves, 'There are no legal moves available.'
-
         if not legal_moves:
-            return None
+            raise ValueError('There are no available moves for the {} player.'.format(self.color))
 
-        # Use epsilon-greedy policy to pick next move with %5 chance of exploring. 
+        # Use epsilon-greedy policy to pick next move with epsilon percent chance of exploring. 
         if random.random() < self.epsilon:
             return random.choice(legal_moves)
 
