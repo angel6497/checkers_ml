@@ -161,17 +161,17 @@ class PositionValueFeature(Feature):
         self.color = color
 
         if color == 'black':
-            self.value_map = {  3:  1, 
-                                1:  0.5,
-                                0:  0,
-                               -1: -0.5,
-                               -3: -1  }
+            self.value_map = {  3: 1, 
+                                1: 0.75,
+                                0: 0.5,
+                               -1: 0.25,
+                               -3: 0  }
         else:
-            self.value_map = {  3: -1, 
-                                1: -0.5,
-                                0:  0,
-                               -1:  0.5,
-                               -3:  1  }
+            self.value_map = {  3: 0, 
+                                1: 0.25,
+                                0: 0.5,
+                               -1: 0.75,
+                               -3: 1  }
 
 
     def get_name(self):

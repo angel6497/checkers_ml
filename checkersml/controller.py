@@ -36,7 +36,7 @@ class CheckersController:
         b = board.Board()
 
         if real_players == 0:
-            player1 = player.LinearModelPlayer('black', b, train         = True,
+            black_player = player.LinearModelPlayer('black', b, train         = True,
                                                            learning_rate = 0.01,
                                                            reg_const     = 0,
                                                            lambda_const  = 0.7,
@@ -44,7 +44,7 @@ class CheckersController:
                                                            epsilon       = 0.05,
                                                            save_file     = 'pickled_models/model_test3.pickle')
 
-            player2 = player.LinearModelPlayer('white', b, train         = False,
+            white_player = player.LinearModelPlayer('white', b, train         = False,
                                                            learning_rate = 0,
                                                            reg_const     = 0,
                                                            lambda_const  = 0,
@@ -53,7 +53,7 @@ class CheckersController:
                                                            save_file     = 'pickled_models/zeros.pickle')
 
         elif real_players == 1:
-            player1 = player.LinearModelPlayer('black', b, train         = True,
+            black_player = player.LinearModelPlayer('black', b, train         = True,
                                                            learning_rate = 0.01,
                                                            reg_const     = 0,
                                                            lambda_const  = 0.7,
@@ -61,19 +61,21 @@ class CheckersController:
                                                            epsilon       = 0.05,
                                                            save_file     = 'pickled_models/model_test3.pickle')
 
-            player2 = player.RealPlayer('white', b)
+            white_player = player.RealPlayer('white', b)
 
         else:
             self.no_train = True
-            player1 = player.RealPlayer('black', b)
-            player2 = player.RealPlayer('white', b)
+            black_player = player.RealPlayer('black', b)
+            whiteplayer = player.RealPlayer('white', b)
 
-        b.set_players(player1, player2)
+        b.set_players(black_player, white_player)
 
-        if real_players < 2:
-            trainee = player1
+        try:
+            gui = CheckersSwingGUI()
+        except RuntimeError:
+            self.logger.error("The Checkers GUI is not installed. Please run 'pipenv run install_gui' or 'make' to install it.")
+            sys.exit(1)
 
-        gui = CheckersSwingGUI()
         gui.display( str(b) )
 
         while(True):
@@ -112,11 +114,19 @@ class CheckersController:
                 response = gui.game_over( winner )
                 
                 if response == 'restart':
+                    for p in [black_player, white_player]:
+                        if isinstance(p, player.MLPlayer) and p.train:
+                            p.reset()
+
                     b.__init__()
-                    b.set_players(player1, player2)
+                    b.set_players(black_player, white_player)
                     gui.display( str(b) )
-                    trainee.reset()
+
                 elif response == 'exit':
+                    for p in [black_player, white_player]:
+                        if isinstance(p, player.MLPlayer) and p.train:
+                            p.save_model()
+
                     gui.exit()
                     sys.exit(0)
         
@@ -131,26 +141,27 @@ class CheckersController:
     
         b = board.Board()
 
-        player1 = player.LinearModelPlayer('black', b, train         = True,
-                                                       learning_rate = 0.01,
-                                                       reg_const     = 0,
-                                                       lambda_const  = 0.7,
-                                                       search_depth  = 3,
-                                                       epsilon       = 0.05,
-                                                       save_file     = 'pickled_models/model_test3.pickle')
+        black_player = player.LinearModelPlayer('black', b, train         = True,
+                                                            learning_rate = 0.01,
+                                                            reg_const     = 0,
+                                                            lambda_const  = 0.7,
+                                                            search_depth  = 2,
+                                                            epsilon       = 0.05,
+                                                            save_file     = 'pickled_models/model_test3.pickle')
 
-        player2 = player.LinearModelPlayer('white', b, train         = False,
-                                                       learning_rate = 0,
-                                                       reg_const     = 0,
-                                                       lambda_const  = 0,
-                                                       search_depth  = 0,
-                                                       epsilon       = 1,
-                                                       save_file     = 'pickled_models/zeros.pickle')
+        white_player = player.LinearModelPlayer('white', b, train         = False,
+                                                            learning_rate = 0,
+                                                            reg_const     = 0,
+                                                            lambda_const  = 0,
+                                                            search_depth  = 0,
+                                                            epsilon       = 1,
+                                                            save_file     = 'pickled_models/zeros.pickle')
 
-        b.set_players(player1, player2)
-        trainee = player1
+        b.set_players(black_player, white_player)
+        trainee = black_player
         
-        curr_cycle = 1
+        curr_cycle    = 1
+        cycle_outcome = None
 
         trainee_wins  = 0
         trainee_ties  = 0
@@ -183,48 +194,78 @@ class CheckersController:
                         if b.game_over < 3:
                             if b.player_in_turn.color == trainee.color:
                                 trainee_wins += 1
+                                cycle_outcome = 'Win'
                             else:
                                 trainee_loses += 1
+                                cycle_outcome = 'Loss'
                         elif b.game_over == 3:
                             trainee_ties += 1
+                            cycle_outcome = 'Tie'
 
                         total_turns += turn_count
 
-                self.print_info(curr_cycle, turn_count, total_turns, trainee, trainee_wins, trainee_ties, trainee_loses)
+                self.print_info( curr_cycle, cycle_outcome, turn_count, total_turns, trainee, trainee_wins, trainee_ties,
+                                 trainee_loses )
                 
                 # Stop training is max number of cycles if reached.
                 curr_cycle += 1
                 if max_cycles and curr_cycle > max_cycles:
+                    for p in [black_player, white_player]:
+                        if p.train:
+                            p.save_model()
+
                     self.logger.info('Final trainee win rate: {:.2%}'.format(trainee_wins/max_cycles))
                     sys.exit(0)
 
                 # Reset the board values on every cycle.
                 b.__init__()
-                b.set_players(player1, player2)
+                b.set_players(black_player, white_player)
                 trainee.reset()
 
             except KeyboardInterrupt:
-                trainee.save_model()
+                for p in [black_player, white_player]:
+                    if p.train:
+                        p.save_model()
+
                 self.logger.info( 'Training simulation ended manually.' )
-                self.logger.info( 'Final data: \n' )
-                self.print_info(curr_cycle-1, turn_count, total_turns, trainee, trainee_wins, trainee_ties, trainee_loses)
+                if curr_cycle > 1:
+                    self.logger.info( 'Final data: \n' )
+                    self.print_info( curr_cycle-1, cycle_outcome, turn_count, total_turns, trainee, trainee_wins, trainee_ties,
+                                     trainee_loses )
+                else:
+                    print('No cycles were completed.')
 
                 sys.exit(0)
                 
 
-    def print_info(self, cycle, turn_count, total_turns, trainee, trainee_wins, trainee_ties, trainee_loses):
+    def print_info(self, cycle, outcome, turn_count, total_turns, trainee, trainee_wins, trainee_ties, trainee_loses):
         '''
         Prints the information gathered after a cycle of training.
         '''
 
         self.logger.info( '---------------------------------------------' )
-        self.logger.info( 'Current cycle: {}\n'.format(cycle) )
+        self.logger.info( 'Current cycle: {}'.format(cycle) )
+        self.logger.info( 'Outcome: {}\n'.format(outcome) )
         self.logger.info( 'Total turns: {}'.format(turn_count) )
         self.logger.info( 'Average turns per match: {:.2f}\n'.format( total_turns/cycle ) )
         self.logger.info( 'Trainee parameters:' )
-        for line in trainee.get_parameters_string().split('\n'):
-            self.logger.info( '   {}'.format(line) )
-        self.logger.info( 'Trainee win rate:  {:.2%}'.format( trainee_wins/cycle ) )
-        self.logger.info( 'Trainee tie rate:  {:.2%}'.format( trainee_ties/cycle ) )
-        self.logger.info( 'Trainee lose rate: {:.2%}'.format (trainee_loses/cycle ) )
+
+        # Format the parameter strings according to how many there are.
+        parameter_lines = trainee.get_parameters_string().split('\n')
+        if len(parameter_lines) <= 25:
+            for line in parameter_lines:
+                self.logger.info( '   {}'.format(line) )
+        else:
+            midpoint = len(parameter_lines) // 2
+            for i in range(midpoint):
+                if i + midpoint < len(parameter_lines):
+                    self.logger.info( '   {}      {}'.format(parameter_lines[i], parameter_lines[i+midpoint]) )
+                else:
+                    self.logger.info( '   {}'.format(parameter_lines[i]) )
+
+        self.logger.info( '' )
+
+        self.logger.info( 'Trainee win rate:  {:>8.2%} [{}/{}]'.format( trainee_wins/cycle, trainee_wins, cycle ) )
+        self.logger.info( 'Trainee tie rate:  {:>8.2%} [{}/{}]'.format( trainee_ties/cycle, trainee_ties, cycle ) )
+        self.logger.info( 'Trainee lose rate: {:>8.2%} [{}/{}]'.format (trainee_loses/cycle, trainee_loses, cycle ) )
         self.logger.info( '---------------------------------------------\n' )

@@ -23,6 +23,9 @@ class CheckersSwingGUI():
         the user.
         '''
 
+        if not os.path.isfile('checkersgui/bin/GamePage.class'):
+            raise RuntimeError('GUI is not installed. Please run make to install it.')
+
         self.GUI = subprocess.Popen(['java', 'GamePage'],
                                     stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE,

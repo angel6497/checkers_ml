@@ -2,8 +2,6 @@ import itertools
 
 from . import features
 
-from pprint import pprint
-
 
 ####### CONSTANTS #######
 
