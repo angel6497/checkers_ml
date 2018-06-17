@@ -36,15 +36,15 @@ class CheckersController:
         b = board.Board()
 
         if real_players == 0:
-            black_player = player.LinearModelPlayer('black', b, train         = True,
+            black_player = player.LinearModelPlayer('black', b, train    = True,
                                                            learning_rate = 0.01,
                                                            reg_const     = 0,
                                                            lambda_const  = 0.7,
                                                            search_depth  = 3,
                                                            epsilon       = 0.05,
-                                                           save_file     = 'pickled_models/model_test3.pickle')
+                                                           save_file     = 'pickled_models/model1.pickle')
 
-            white_player = player.LinearModelPlayer('white', b, train         = False,
+            white_player = player.LinearModelPlayer('white', b, train    = False,
                                                            learning_rate = 0,
                                                            reg_const     = 0,
                                                            lambda_const  = 0,
@@ -53,13 +53,13 @@ class CheckersController:
                                                            save_file     = 'pickled_models/zeros.pickle')
 
         elif real_players == 1:
-            black_player = player.LinearModelPlayer('black', b, train         = True,
+            black_player = player.LinearModelPlayer('black', b, train    = True,
                                                            learning_rate = 0.01,
                                                            reg_const     = 0,
                                                            lambda_const  = 0.7,
                                                            search_depth  = 3,
                                                            epsilon       = 0.05,
-                                                           save_file     = 'pickled_models/model_test3.pickle')
+                                                           save_file     = 'pickled_models/model1.pickle')
 
             white_player = player.RealPlayer('white', b)
 
@@ -145,9 +145,9 @@ class CheckersController:
                                                             learning_rate = 0.01,
                                                             reg_const     = 0,
                                                             lambda_const  = 0.7,
-                                                            search_depth  = 2,
+                                                            search_depth  = 3,
                                                             epsilon       = 0.05,
-                                                            save_file     = 'pickled_models/model_test3.pickle')
+                                                            save_file     = 'pickled_models/model1.pickle')
 
         white_player = player.LinearModelPlayer('white', b, train         = False,
                                                             learning_rate = 0,
@@ -159,6 +159,7 @@ class CheckersController:
 
         b.set_players(black_player, white_player)
         trainee = black_player
+        other_player = black_player if trainee == white_player else white_player
         
         curr_cycle    = 1
         cycle_outcome = None
@@ -181,7 +182,7 @@ class CheckersController:
 
                     move = b.player_in_turn.make_move()
 
-                    # Current player has no possible legal moves, so turn is passed to the next one.
+                    # It is illegal to pass turn in Checkers.
                     if not move:
                         raise ValueError("Player didn't pick a move.")
 
@@ -195,9 +196,11 @@ class CheckersController:
                             if b.player_in_turn.color == trainee.color:
                                 trainee_wins += 1
                                 cycle_outcome = 'Win'
+                                other_player.update_loss()
                             else:
                                 trainee_loses += 1
                                 cycle_outcome = 'Loss'
+                                trainee.update_loss()
                         elif b.game_over == 3:
                             trainee_ties += 1
                             cycle_outcome = 'Tie'
@@ -207,7 +210,7 @@ class CheckersController:
                 self.print_info( curr_cycle, cycle_outcome, turn_count, total_turns, trainee, trainee_wins, trainee_ties,
                                  trainee_loses )
                 
-                # Stop training is max number of cycles if reached.
+                # Stop training if max number of cycles if reached.
                 curr_cycle += 1
                 if max_cycles and curr_cycle > max_cycles:
                     for p in [black_player, white_player]:
@@ -243,7 +246,7 @@ class CheckersController:
         Prints the information gathered after a cycle of training.
         '''
 
-        self.logger.info( '---------------------------------------------' )
+        self.logger.info( '---------------------------------------------------------------------------------------------' )
         self.logger.info( 'Current cycle: {}'.format(cycle) )
         self.logger.info( 'Outcome: {}\n'.format(outcome) )
         self.logger.info( 'Total turns: {}'.format(turn_count) )
@@ -268,4 +271,4 @@ class CheckersController:
         self.logger.info( 'Trainee win rate:  {:>8.2%} [{}/{}]'.format( trainee_wins/cycle, trainee_wins, cycle ) )
         self.logger.info( 'Trainee tie rate:  {:>8.2%} [{}/{}]'.format( trainee_ties/cycle, trainee_ties, cycle ) )
         self.logger.info( 'Trainee lose rate: {:>8.2%} [{}/{}]'.format (trainee_loses/cycle, trainee_loses, cycle ) )
-        self.logger.info( '---------------------------------------------\n' )
+        self.logger.info( '---------------------------------------------------------------------------------------------\n' )

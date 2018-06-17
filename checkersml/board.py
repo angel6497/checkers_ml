@@ -289,10 +289,15 @@ class Board:
                     moves = self.get_legal_moves(col, row, cache=cache)
                     legal_moves += moves
 
-        # If there is any possible jump then only other jumps are legal.
+        # Capture moves are mandatory when possible.
         capture_moves = [ m for m in legal_moves if m.capture ]
         if capture_moves:
             legal_moves = capture_moves
+
+            if cache and self.required_src:
+                legal_moves = [ m for m in legal_moves if m.src == self.required_src ]
+                if not legal_moves:
+                    raise RuntimeError('There are no legal moves that match the required source.')
 
         return legal_moves
 
@@ -444,8 +449,6 @@ class Move:
         self.dst = dst
         self.capture = capture
         self.promote = promote
-
-        return
 
 
     def __str__(self):

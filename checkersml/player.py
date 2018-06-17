@@ -198,8 +198,13 @@ class MLPlayer(Player):
         next_agent = 'min' if agent == 'max' else 'max'
         next_color = 'white' if color == 'black' else 'black'
 
-        # Perform the given move as a temporary update.
         undo_key = self.board.temporary_update(move)
+
+        # Check if game is over.
+        if self.board.game_over:
+            leaf_features = self.compute_features()
+            self.board.undo_temporary_update(undo_key)
+            return self.evaluate(leaf_features), leaf_features
 
         # Check if a second jump is available.
         if move.capture:
@@ -223,10 +228,10 @@ class MLPlayer(Player):
             else:
                 return  1, leaf_features
 
-        # If the max depth is reached, bootstrap the value using the value function approximation.
+        # If the max depth is reached, bootstrap the value using the value function approximator.
         if depth == self.search_depth:
-            self.board.undo_temporary_update(undo_key)
             features = self.compute_features()
+            self.board.undo_temporary_update(undo_key)
             return self.evaluate(features), features
 
         if agent == 'min':
@@ -240,7 +245,6 @@ class MLPlayer(Player):
             else:
                 score, leaf_features = self.minimax_search(next_move, next_agent, next_color, depth+1)
 
-            # Update the best score if necessary.
             if agent == 'min' and score < best_score:
                 best_score  = score
                 pv_features = leaf_features
@@ -248,10 +252,25 @@ class MLPlayer(Player):
                 best_score  = score
                 pv_features = leaf_features
 
-        # Revert the temporary move.
         self.board.undo_temporary_update(undo_key)
 
         return best_score, pv_features
+
+
+    def update_loss(self):
+        '''
+        Updates the model according to loosing result.
+        This method must be called at the end of the episode in order for the player to account
+        for the loss.
+        '''
+
+        if self.train:
+            loosing_features = self.compute_features()
+            next_state = State(self.evaluate(loosing_features), np.array(loosing_features))
+            self.model.td_lambda(self.prev_state, next_state)
+
+            if not self.no_records:
+                self.add_record(loosing_features, self.evaluate(loosing_features))
              
 
     def add_record(self, x, y):

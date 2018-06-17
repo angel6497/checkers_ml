@@ -112,7 +112,7 @@ class WhiteThreatenedFeature(Feature):
     def compute_value(self, b):
 
         threatened_pieces = set()
-        legal_moves = b.get_all_legal_moves('black') 
+        legal_moves = b.get_all_legal_moves('black', cache=False) 
         
         for move in legal_moves:
             if move.capture:
@@ -136,7 +136,7 @@ class BlackThreatenedFeature(Feature):
     
     def compute_value(self, b):
         threatened_pieces = set()
-        legal_moves = b.get_all_legal_moves('white') 
+        legal_moves = b.get_all_legal_moves('white', cache=False) 
         
         for move in legal_moves:
             if move.capture:
