@@ -42,7 +42,7 @@ You can exit the virtual environment using CTRL-D.
 
 ### GUI
 
-If you want yo use the checkers GUI, you must install it by running:
+If you want to use the checkers GUI, you must install it by running:
 
 ```shell
 $ make
