@@ -66,7 +66,7 @@ class CheckersController:
         else:
             self.no_train = True
             black_player = player.RealPlayer('black', b)
-            whiteplayer = player.RealPlayer('white', b)
+            white_player = player.RealPlayer('white', b)
 
         b.set_players(black_player, white_player)
 
