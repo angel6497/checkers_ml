@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 
-import os
 import sys
+if sys.version_info < (3, 4):
+    print('[ERROR]: This project requires Python 3.4 or higher. Running on Python {}.{}.{}.'.format(*sys.version_info[:3]))
+    sys.exit(1)
+
+import os
 import time
 import logging
 import datetime

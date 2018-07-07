@@ -8,9 +8,6 @@ numpy = "*"
 
 [dev-packages]
 
-[requires]
-python_version = "3.6"
-
 [scripts]
 install_gui = "make"
 uninstall_gui = "rm -rf checkersgui/bin"
