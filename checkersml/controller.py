@@ -42,7 +42,8 @@ class CheckersController:
                                                            lambda_const  = 0.7,
                                                            search_depth  = 3,
                                                            epsilon       = 0.05,
-                                                           save_file     = 'pickled_models/model1.pickle')
+                                                           save_file     = 'pickled_models/model1.pickle',
+                                                           no_records    = self.no_data)
 
             white_player = player.LinearModelPlayer('white', b, train    = False,
                                                            learning_rate = 0,
@@ -50,7 +51,8 @@ class CheckersController:
                                                            lambda_const  = 0,
                                                            search_depth  = 0,
                                                            epsilon       = 1,
-                                                           save_file     = 'pickled_models/zeros.pickle')
+                                                           save_file     = 'pickled_models/zeros.pickle',
+                                                           no_records    = self.no_data)
 
         elif real_players == 1:
             black_player = player.LinearModelPlayer('black', b, train    = True,
@@ -59,7 +61,8 @@ class CheckersController:
                                                            lambda_const  = 0.7,
                                                            search_depth  = 3,
                                                            epsilon       = 0.05,
-                                                           save_file     = 'pickled_models/model1.pickle')
+                                                           save_file     = 'pickled_models/model1.pickle',
+                                                           no_records    = self.no_data)
 
             white_player = player.RealPlayer('white', b)
 
@@ -126,6 +129,7 @@ class CheckersController:
                     for p in [black_player, white_player]:
                         if isinstance(p, player.MLPlayer) and p.train:
                             p.save_model()
+                            p.reset()
 
                     gui.exit()
                     sys.exit(0)
@@ -147,7 +151,8 @@ class CheckersController:
                                                             lambda_const  = 0.7,
                                                             search_depth  = 3,
                                                             epsilon       = 0.05,
-                                                            save_file     = 'pickled_models/model1.pickle')
+                                                            save_file     = 'pickled_models/model1.pickle',
+                                                            no_records    = self.no_data)
 
         white_player = player.LinearModelPlayer('white', b, train         = False,
                                                             learning_rate = 0,
@@ -155,7 +160,8 @@ class CheckersController:
                                                             lambda_const  = 0,
                                                             search_depth  = 0,
                                                             epsilon       = 1,
-                                                            save_file     = 'pickled_models/zeros.pickle')
+                                                            save_file     = 'pickled_models/zeros.pickle',
+                                                            no_records    = self.no_data)
 
         b.set_players(black_player, white_player)
         trainee = black_player
@@ -216,6 +222,7 @@ class CheckersController:
                     for p in [black_player, white_player]:
                         if p.train:
                             p.save_model()
+                            p.reset()
 
                     self.logger.info('Final trainee win rate: {:.2%}'.format(trainee_wins/max_cycles))
                     sys.exit(0)

@@ -95,9 +95,9 @@ class MLPlayer(Player):
         self.set_model()
 
         dt = datetime.datetime.today().strftime('%Y-%m-%d_%H:%M:%S')
-        self.logdir = os.path.join('training_data', dt)
+        self.logdir = os.path.join('training_data', color + '_player', dt)
 
-        if not os.path.isdir(self.logdir):
+        if self.train and not self.no_records and not os.path.isdir(self.logdir):
             os.makedirs(self.logdir)
 
 
@@ -324,9 +324,11 @@ class MLPlayer(Player):
         '''
 
         self.model.reset()
-        self.save_records(cycle=self.curr_cycle)
-        self.records_X = None
-        self.records_y = None
+
+        if not self.no_records:
+            self.save_records(cycle=self.curr_cycle)
+            self.records_X = None
+            self.records_y = None
 
         self.curr_cycle += 1
 

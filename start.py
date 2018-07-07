@@ -16,7 +16,7 @@ def main():
     '''
 
     args   = parse_arguments()
-    logger = setup_logger(args.debug)
+    logger = setup_logger(args.debug, args.nolog)
 
     controller = CheckersController(args.notrain, args.nodata)
 
@@ -25,7 +25,7 @@ def main():
     elif args.train != None:
         controller.train(args.train)
     else:
-        logger.error('No command line arguments found.')
+        logger.error("Error in command line arguments.")
 
 
 
@@ -41,6 +41,7 @@ def parse_arguments():
     parser.add_argument( '-play', type=int, 
                          help='Play a real game using a GUI. Argument determines number of real players.' )
     parser.add_argument( '-notrain', action='store_true', help='Prevents training during real games.' )
+    parser.add_argument( '-nolog', action='store_true', help='Prevents the program from generating logs.' )
     parser.add_argument( '-nodata', action='store_true', help='Stops training data from being saved to files.' )
     parser.add_argument( '-debug', action='store_true', help='Enable debug messages.' )
 
@@ -54,12 +55,12 @@ def parse_arguments():
     return args
 
 
-def setup_logger(debug):
+def setup_logger(debug, no_log):
     '''
     Create and setup logger instance.
     '''
 
-    if not os.path.isdir('logs'):
+    if not no_log and not os.path.isdir('logs'):
         os.mkdir('logs')
         
     dt      = datetime.datetime.today().strftime('%Y-%m-%d_%H:%M:%S.log')
@@ -69,13 +70,13 @@ def setup_logger(debug):
 
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter( ColoredFormatter() )
-
-    file_handler   = logging.FileHandler(logfile, mode='w')
-    file_formatter = logging.Formatter('[{asctime} {levelname}] {message}', datefmt='%H:%M:%S', style='{')
-    file_handler.setFormatter(file_formatter)
-
     logger.addHandler(stream_handler)
-    logger.addHandler(file_handler)
+
+    if not no_log:
+        file_handler   = logging.FileHandler(logfile, mode='w')
+        file_formatter = logging.Formatter('[{asctime} {levelname}] {message}', datefmt='%H:%M:%S', style='{')
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
 
     if debug:
         logger.setLevel(logging.DEBUG)
