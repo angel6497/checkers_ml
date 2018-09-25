@@ -62,7 +62,7 @@ The hyperparameters of the training algorithm can be changed in controller.py in
 
 ## Playing Checkers
 
-To play a match against the the agent or another human player use the `-play` option.
+To play a match against the agent or another human player use the `-play` option.
 
 ```shell
 $ ./start.py -play N
